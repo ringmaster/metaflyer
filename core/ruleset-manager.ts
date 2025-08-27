@@ -29,25 +29,42 @@ export class RulesetManager {
 			};
 		}
 
+		// Find a ruleset that matches ALL properties in metadata_match
 		const matchingRuleset = this.findMatchingRuleset(frontmatter);
 		
-		if (!matchingRuleset) {
+		if (matchingRuleset) {
+			// Check if the trigger fields are still valid (not empty)
+			const hasValidTriggerFields = this.hasValidTriggerFields(frontmatter, matchingRuleset);
+			
+			if (!hasValidTriggerFields) {
+				// Ruleset matches but trigger fields became invalid/empty
+				const invalidFields = this.getInvalidTriggerFields(frontmatter, matchingRuleset);
+				return {
+					ruleset: matchingRuleset,
+					matches: false,
+					missingFields: invalidFields,
+					isComplete: false
+				};
+			}
+
+			// Trigger fields are valid, now check for missing required fields
+			const missingFields = this.getMissingFields(frontmatter, matchingRuleset);
+			const isComplete = missingFields.length === 0;
+
 			return {
-				ruleset: null,
-				matches: false,
-				missingFields: [],
-				isComplete: false
+				ruleset: matchingRuleset,
+				matches: true,
+				missingFields,
+				isComplete
 			};
 		}
 
-		const missingFields = this.getMissingFields(frontmatter, matchingRuleset);
-		const isComplete = missingFields.length === 0;
-
+		// No ruleset matches at all
 		return {
-			ruleset: matchingRuleset,
-			matches: true,
-			missingFields,
-			isComplete
+			ruleset: null,
+			matches: false,
+			missingFields: [],
+			isComplete: false
 		};
 	}
 
@@ -59,6 +76,7 @@ export class RulesetManager {
 		}
 		return null;
 	}
+
 
 	private matchesMetadataConditions(frontmatter: any, conditions: Record<string, any>): boolean {
 		for (const [key, value] of Object.entries(conditions)) {
@@ -93,7 +111,13 @@ export class RulesetManager {
 			case 'string':
 				return typeof value !== 'string' || value.trim() === '';
 			case 'array':
-				return !Array.isArray(value) || value.length === 0;
+				// Array must exist, be an array, and have at least one non-empty value
+				if (!Array.isArray(value) || value.length === 0) {
+					return true;
+				}
+				// Check if all values in array are empty/null/undefined
+				return value.every(item => item === null || item === undefined || 
+					(typeof item === 'string' && item.trim() === ''));
 			case 'date':
 				return typeof value !== 'string' || value.trim() === '';
 			case 'number':
@@ -173,5 +197,64 @@ export class RulesetManager {
 		if (index >= 0 && index < this.settings.rulesets.length) {
 			this.settings.rulesets.splice(index, 1);
 		}
+	}
+
+	private hasValidTriggerFields(frontmatter: any, ruleset: Ruleset): boolean {
+		// Check if all trigger fields (metadata_match conditions) are valid
+		for (const [key, expectedValue] of Object.entries(ruleset.metadata_match)) {
+			const actualValue = frontmatter[key];
+			
+			// Field must exist and not be empty
+			if (actualValue === undefined || actualValue === null) {
+				return false;
+			}
+			
+			// For strings, check if empty or just whitespace
+			if (typeof expectedValue === 'string' && 
+				(typeof actualValue !== 'string' || actualValue.trim() === '')) {
+				return false;
+			}
+			
+			// For arrays, must have at least one non-empty value
+			if (Array.isArray(expectedValue) && 
+				(!Array.isArray(actualValue) || actualValue.length === 0 ||
+				 actualValue.every(item => item === null || item === undefined || 
+					(typeof item === 'string' && item.trim() === '')))) {
+				return false;
+			}
+		}
+		
+		return true;
+	}
+
+	private getInvalidTriggerFields(frontmatter: any, ruleset: Ruleset): string[] {
+		const invalidFields: string[] = [];
+		
+		for (const [key, expectedValue] of Object.entries(ruleset.metadata_match)) {
+			const actualValue = frontmatter[key];
+			
+			// Check if field is missing or empty
+			if (actualValue === undefined || actualValue === null) {
+				invalidFields.push(key);
+				continue;
+			}
+			
+			// For strings, check if empty
+			if (typeof expectedValue === 'string' && 
+				(typeof actualValue !== 'string' || actualValue.trim() === '')) {
+				invalidFields.push(key);
+				continue;
+			}
+			
+			// For arrays, check if empty or all values are empty
+			if (Array.isArray(expectedValue) && 
+				(!Array.isArray(actualValue) || actualValue.length === 0 ||
+				 actualValue.every(item => item === null || item === undefined || 
+					(typeof item === 'string' && item.trim() === '')))) {
+				invalidFields.push(key);
+			}
+		}
+		
+		return invalidFields;
 	}
 }

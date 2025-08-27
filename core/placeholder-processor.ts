@@ -1,5 +1,5 @@
 export class PlaceholderProcessor {
-	static processPlaceholders(template: string, frontmatter: Record<string, any>): string {
+	static processPlaceholders(template: string, frontmatter: Record<string, any>, file?: any): string {
 		if (!template) return '';
 
 		let result = template;
@@ -7,7 +7,23 @@ export class PlaceholderProcessor {
 		result = result.replace(/\{([^}]+)\}/g, (match, placeholder) => {
 			const parts = placeholder.split(':');
 			const fieldName = parts[0].trim();
-			const format = parts[1]?.trim();
+			const modifier = parts[1]?.trim();
+
+			// Handle special placeholders that don't come from frontmatter
+			if (fieldName === 'created') {
+				if (file) {
+					const createdDate = new Date(file.stat.ctime);
+					if (modifier) {
+						return this.formatDateValue(createdDate, modifier);
+					} else {
+						// Default format for created date
+						return this.formatDateValue(createdDate, 'YYYY-MM-DD');
+					}
+				} else {
+					// Fallback if no file provided
+					return match;
+				}
+			}
 
 			if (!frontmatter.hasOwnProperty(fieldName)) {
 				return match;
@@ -15,15 +31,25 @@ export class PlaceholderProcessor {
 
 			const value = frontmatter[fieldName];
 			
-			if (fieldName === 'date' && format) {
-				return this.formatDateValue(value, format);
+			// Handle date formatting (takes precedence over other modifiers)
+			if (fieldName === 'date' && modifier && modifier !== 'strip') {
+				return this.formatDateValue(value, modifier);
 			}
 
+			// Process the value based on type
+			let processedValue: string;
 			if (Array.isArray(value)) {
-				return value.join(', ');
+				const processedArray = value.map(item => {
+					const stringValue = String(item);
+					return modifier === 'strip' ? this.stripSymbols(stringValue) : stringValue;
+				});
+				processedValue = processedArray.join(', ');
+			} else {
+				const stringValue = String(value);
+				processedValue = modifier === 'strip' ? this.stripSymbols(stringValue) : stringValue;
 			}
 
-			return String(value);
+			return processedValue;
 		});
 
 		return result;
@@ -73,5 +99,18 @@ export class PlaceholderProcessor {
 			.map(segment => this.sanitizeForFilename(segment))
 			.filter(segment => segment.length > 0)
 			.join('/');
+	}
+
+	private static stripSymbols(text: string): string {
+		// Remove common symbols and markdown formatting
+		// This handles: [[]], [], (), {}, @, #, *, _, ~, `, |, \, /, etc.
+		return text
+			.replace(/\[\[([^\]]+)\]\]/g, '$1')  // [[text]] -> text
+			.replace(/\[([^\]]+)\]/g, '$1')     // [text] -> text
+			.replace(/\(([^)]+)\)/g, '$1')     // (text) -> text
+			.replace(/\{([^}]+)\}/g, '$1')     // {text} -> text
+			.replace(/[@#*_~`|\\\/]/g, '')     // Remove common symbols
+			.replace(/\s+/g, ' ')              // Normalize whitespace
+			.trim();                           // Remove leading/trailing spaces
 	}
 }

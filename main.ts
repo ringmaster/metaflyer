@@ -1,4 +1,4 @@
-import { Plugin, TFile, Notice, MarkdownView } from 'obsidian';
+import { Plugin, TFile, Notice, MarkdownView, FuzzySuggestModal } from 'obsidian';
 import { MetaflyerSettings, DEFAULT_SETTINGS } from './core/settings';
 import { MetaflyerSettingsTab } from './settings/settings-tab';
 import { RulesetManager } from './core/ruleset-manager';
@@ -15,7 +15,7 @@ export default class MetaflyerPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.rulesetManager = new RulesetManager(this.settings);
-		this.metadataEnforcer = new MetadataEnforcer(this.app, this.rulesetManager);
+		this.metadataEnforcer = new MetadataEnforcer(this.app, this.rulesetManager, this.settings.enableWarnings);
 		this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
 
 		this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
@@ -23,12 +23,45 @@ export default class MetaflyerPlugin extends Plugin {
 		this.addCommand({
 			id: 'organize-note',
 			name: 'Organize Note (Rename & Move)',
-			hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'M' }],
 			checkCallback: (checking: boolean) => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (activeFile) {
+					const cache = this.app.metadataCache.getFileCache(activeFile);
+					const frontmatter = cache?.frontmatter;
+					const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+					
+					// Only show command if note is complete and matches a ruleset
+					if (evaluation.matches && evaluation.isComplete) {
+						if (!checking) {
+							this.autoOrganizer.organizeNote(activeFile);
+						}
+						return true;
+					}
+				}
+				return false;
+			}
+		});
+
+		this.addCommand({
+			id: 'toggle-warnings',
+			name: 'Toggle Warning Visibility',
+			callback: async () => {
+				this.settings.enableWarnings = !this.settings.enableWarnings;
+				await this.saveSettings();
+				
+				// Re-evaluate all files to apply/remove warnings
+				this.metadataEnforcer.evaluateAllFiles();
+			}
+		});
+
+		this.addCommand({
+			id: 'apply-ruleset',
+			name: 'Apply Ruleset to Current Note',
+			checkCallback: (checking: boolean) => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile && activeFile.extension === 'md') {
 					if (!checking) {
-						this.autoOrganizer.organizeNote(activeFile);
+						this.showRulesetSelector();
 					}
 					return true;
 				}
@@ -87,5 +120,135 @@ export default class MetaflyerPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 		this.rulesetManager.updateSettings(this.settings);
+		this.metadataEnforcer.updateSettings(this.settings.enableWarnings);
+	}
+
+	showRulesetSelector() {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		new RulesetSelectorModal(this.app, this.settings.rulesets, async (selectedRuleset) => {
+			await this.applyRulesetToFile(activeFile, selectedRuleset);
+		}).open();
+	}
+
+	private async applyRulesetToFile(file: TFile, ruleset: any) {
+		try {
+			// Read current file content
+			const content = await this.app.vault.read(file);
+			const cache = this.app.metadataCache.getFileCache(file);
+			const currentFrontmatter = cache?.frontmatter || {};
+
+			// Merge the ruleset's metadata_match properties into the current frontmatter
+			const updatedFrontmatter = {
+				...currentFrontmatter,
+				...ruleset.metadata_match
+			};
+
+			// Update the file with the new frontmatter
+			await this.updateFileFrontmatter(file, updatedFrontmatter);
+
+			new Notice(`Applied ruleset "${ruleset.name}" to current note`);
+		} catch (error) {
+			console.error('Error applying ruleset:', error);
+			new Notice('Error applying ruleset. Check console for details.');
+		}
+	}
+
+	private async updateFileFrontmatter(file: TFile, frontmatter: Record<string, any>) {
+		const content = await this.app.vault.read(file);
+		const lines = content.split('\n');
+
+		let frontmatterStart = -1;
+		let frontmatterEnd = -1;
+
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].trim() === '---') {
+				if (frontmatterStart === -1) {
+					frontmatterStart = i;
+				} else {
+					frontmatterEnd = i;
+					break;
+				}
+			}
+		}
+
+		const yamlContent = this.stringifyFrontmatter(frontmatter);
+		
+		let newContent: string;
+		if (frontmatterStart >= 0 && frontmatterEnd > frontmatterStart) {
+			// Replace existing frontmatter
+			const beforeFrontmatter = lines.slice(0, frontmatterStart);
+			const afterFrontmatter = lines.slice(frontmatterEnd + 1);
+			newContent = [
+				...beforeFrontmatter,
+				'---',
+				yamlContent,
+				'---',
+				...afterFrontmatter
+			].join('\n');
+		} else {
+			// Add new frontmatter at the beginning
+			newContent = `---\n${yamlContent}\n---\n${content}`;
+		}
+
+		await this.app.vault.modify(file, newContent);
+	}
+
+	private stringifyFrontmatter(frontmatter: Record<string, any>): string {
+		const lines: string[] = [];
+		
+		for (const [key, value] of Object.entries(frontmatter)) {
+			if (Array.isArray(value)) {
+				if (value.length === 0) {
+					lines.push(`${key}: []`);
+				} else {
+					lines.push(`${key}:`);
+					for (const item of value) {
+						lines.push(`  - ${this.escapeYamlValue(item)}`);
+					}
+				}
+			} else {
+				lines.push(`${key}: ${this.escapeYamlValue(value)}`);
+			}
+		}
+		
+		return lines.join('\n');
+	}
+
+	private escapeYamlValue(value: any): string {
+		if (typeof value === 'string') {
+			if (value.includes(':') || value.includes('"') || value.includes("'") || 
+				value.includes('\n') || value.includes('#')) {
+				return `"${value.replace(/"/g, '\\"')}"`;
+			}
+		}
+		return String(value);
 	}
 }
+
+class RulesetSelectorModal extends FuzzySuggestModal<any> {
+	private rulesets: any[];
+	private onSelect: (ruleset: any) => void;
+
+	constructor(app: any, rulesets: any[], onSelect: (ruleset: any) => void) {
+		super(app);
+		this.rulesets = rulesets;
+		this.onSelect = onSelect;
+		
+		this.setPlaceholder('Select a ruleset to apply...');
+	}
+
+	getItems(): any[] {
+		return this.rulesets;
+	}
+
+	getItemText(ruleset: any): string {
+		return ruleset.name;
+	}
+
+	onChooseItem(ruleset: any, evt: MouseEvent | KeyboardEvent) {
+		this.onSelect(ruleset);
+	}
+}
+

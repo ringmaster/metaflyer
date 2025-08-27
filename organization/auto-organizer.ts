@@ -2,6 +2,7 @@ import { App, TFile, Notice, TFolder } from 'obsidian';
 import { RulesetManager } from '../core/ruleset-manager';
 import { PlaceholderProcessor } from '../core/placeholder-processor';
 import { ErrorHandler } from '../core/error-handler';
+import { Ruleset } from '../core/settings';
 
 export class AutoOrganizer {
 	private app: App;
@@ -38,18 +39,20 @@ export class AutoOrganizer {
 			let newTitle = file.basename;
 			let newPath = file.parent?.path || '';
 
-			if (evaluation.ruleset.title) {
+			if (this.shouldChangeTitle(file, evaluation.ruleset) && evaluation.ruleset.title) {
 				newTitle = PlaceholderProcessor.processPlaceholders(
 					evaluation.ruleset.title, 
-					frontmatter
+					frontmatter,
+					file
 				);
 				newTitle = PlaceholderProcessor.sanitizeForFilename(newTitle);
 			}
 
-			if (evaluation.ruleset.path) {
+			if (evaluation.ruleset.enableAutoMove !== false && evaluation.ruleset.path) {
 				newPath = PlaceholderProcessor.processPlaceholders(
 					evaluation.ruleset.path, 
-					frontmatter
+					frontmatter,
+					file
 				);
 				newPath = PlaceholderProcessor.sanitizeForPath(newPath);
 			}
@@ -133,18 +136,20 @@ export class AutoOrganizer {
 		let expectedTitle = file.basename;
 		let expectedPath = file.parent?.path || '';
 
-		if (evaluation.ruleset.title) {
+		if (this.shouldChangeTitle(file, evaluation.ruleset) && evaluation.ruleset.title) {
 			expectedTitle = PlaceholderProcessor.processPlaceholders(
 				evaluation.ruleset.title, 
-				frontmatter
+				frontmatter,
+				file
 			);
 			expectedTitle = PlaceholderProcessor.sanitizeForFilename(expectedTitle);
 		}
 
-		if (evaluation.ruleset.path) {
+		if (evaluation.ruleset.enableAutoMove !== false && evaluation.ruleset.path) {
 			expectedPath = PlaceholderProcessor.processPlaceholders(
 				evaluation.ruleset.path, 
-				frontmatter
+				frontmatter,
+				file
 			);
 			expectedPath = PlaceholderProcessor.sanitizeForPath(expectedPath);
 		}
@@ -152,5 +157,30 @@ export class AutoOrganizer {
 		const expectedFullPath = `${expectedPath}/${expectedTitle}.md`;
 		
 		return file.path === expectedFullPath;
+	}
+
+	private shouldChangeTitle(file: TFile, ruleset: Ruleset): boolean {
+		const mode = ruleset.autoTitleMode || 'always'; // Default to 'always' for backward compatibility
+		
+		switch (mode) {
+			case 'never':
+				return false;
+			case 'always':
+				return true;
+			case 'if_unset':
+				return this.isTitleUnset(file.basename);
+			default:
+				return true; // Default fallback
+		}
+	}
+
+	private isTitleUnset(filename: string): boolean {
+		// Consider title "unset" if it's empty or starts with "Untitled"
+		if (!filename || filename.trim() === '') {
+			return true;
+		}
+		
+		// Check if filename starts with "Untitled" (case insensitive)
+		return filename.toLowerCase().startsWith('untitled');
 	}
 }

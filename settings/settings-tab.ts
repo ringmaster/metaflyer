@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import MetaflyerPlugin from '../main';
 import { Ruleset, MetadataField } from '../core/settings';
+import { PlaceholderProcessor } from '../core/placeholder-processor';
 
 export class MetaflyerSettingsTab extends PluginSettingTab {
 	plugin: MetaflyerPlugin;
@@ -16,8 +17,27 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 
 		containerEl.createEl('h2', { text: 'Metaflyer Settings' });
 
+		this.createGeneralSettings();
 		this.createRulesetsSection();
 		this.createTestingSection();
+	}
+
+	private createGeneralSettings() {
+		const { containerEl } = this;
+
+		containerEl.createEl('h3', { text: 'General Settings' });
+
+		new Setting(containerEl)
+			.setName('Enable Warning Visibility')
+			.setDesc('Show visual warnings and alerts for incomplete or missing properties')
+			.addToggle(toggle => {
+				toggle.setValue(this.plugin.settings.enableWarnings)
+					.onChange(async (value) => {
+						this.plugin.settings.enableWarnings = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
 	}
 
 	private createRulesetsSection() {
@@ -43,6 +63,8 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 							metadata: [],
 							title: '',
 							path: '',
+							autoTitleMode: 'always',
+							enableAutoMove: true,
 							behaviors: {}
 						};
 						this.plugin.settings.rulesets.push(newRuleset);
@@ -75,16 +97,18 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(rulesetContainer)
-			.setName('Metadata Match')
-			.setDesc('JSON object defining when this ruleset applies (e.g., {"type": "O3"})')
+			.setName('Properties Match')
+			.setDesc('YAML object defining when this ruleset applies (e.g., type: O3)')
 			.addTextArea(text => {
-				text.setValue(JSON.stringify(ruleset.metadata_match, null, 2))
+				// Convert to YAML for display
+				const yamlValue = this.objectToYaml(ruleset.metadata_match);
+				text.setValue(yamlValue)
 					.onChange(async (value) => {
 						try {
-							ruleset.metadata_match = JSON.parse(value);
+							ruleset.metadata_match = this.yamlToObject(value);
 							await this.plugin.saveSettings();
 						} catch (e) {
-							console.error('Invalid JSON in metadata match:', e);
+							console.error('Invalid YAML in properties match:', e);
 						}
 					});
 				text.inputEl.rows = 3;
@@ -112,15 +136,40 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
+		new Setting(rulesetContainer)
+			.setName('Auto Title Mode')
+			.setDesc('When to change note titles using the title template')
+			.addDropdown(dropdown => {
+				dropdown.addOption('never', 'Do not change')
+					.addOption('if_unset', 'Change if unset')
+					.addOption('always', 'Always change')
+					.setValue(ruleset.autoTitleMode || 'always')
+					.onChange(async (value: any) => {
+						ruleset.autoTitleMode = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(rulesetContainer)
+			.setName('Enable Auto Move')
+			.setDesc('Automatically move notes to path location when organizing')
+			.addToggle(toggle => {
+				toggle.setValue(ruleset.enableAutoMove !== false)
+					.onChange(async (value) => {
+						ruleset.enableAutoMove = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
 		const metadataContainer = rulesetContainer.createDiv();
-		metadataContainer.createEl('h5', { text: 'Required Metadata Fields' });
+		metadataContainer.createEl('h5', { text: 'Required Properties Fields' });
 
 		for (let i = 0; i < ruleset.metadata.length; i++) {
 			this.createMetadataFieldEditor(metadataContainer, ruleset.metadata[i], i, ruleset);
 		}
 
 		new Setting(metadataContainer)
-			.setName('Add Metadata Field')
+			.setName('Add Properties Field')
 			.addButton(button => {
 				button.setButtonText('Add Field')
 					.onClick(() => {
@@ -156,6 +205,34 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 		fieldContainer.style.marginBottom = '10px';
 		fieldContainer.style.borderRadius = '3px';
 
+		// Create a container for the date format setting that we can show/hide
+		const dateFormatContainer = fieldContainer.createDiv();
+		
+		const updateDateFormatVisibility = (fieldType: string) => {
+			if (fieldType === 'date') {
+				dateFormatContainer.style.display = 'block';
+				if (dateFormatContainer.children.length === 0) {
+					new Setting(dateFormatContainer)
+						.setName('Date Format')
+						.setDesc('Format string (e.g., YYYY-MM-DD, YYYY-MM-DD hh:mma)')
+						.addText(text => {
+							text.setValue(field.format || '')
+								.onChange(async (value) => {
+									field.format = value;
+									await this.plugin.saveSettings();
+								});
+						});
+				}
+			} else {
+				dateFormatContainer.style.display = 'none';
+				// Clear the format when not a date field
+				if (field.format) {
+					field.format = undefined;
+					this.plugin.saveSettings();
+				}
+			}
+		};
+
 		new Setting(fieldContainer)
 			.setName('Field Name')
 			.addText(text => {
@@ -174,6 +251,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					.setValue(field.type)
 					.onChange(async (value: any) => {
 						field.type = value;
+						updateDateFormatVisibility(value);
 						await this.plugin.saveSettings();
 					});
 			})
@@ -195,18 +273,8 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		if (field.type === 'date') {
-			new Setting(fieldContainer)
-				.setName('Date Format')
-				.setDesc('Format string (e.g., YYYY-MM-DD, YYYY-MM-DD hh:mma)')
-				.addText(text => {
-					text.setValue(field.format || '')
-						.onChange(async (value) => {
-							field.format = value;
-							await this.plugin.saveSettings();
-						});
-				});
-		}
+		// Initialize the date format visibility based on current field type
+		updateDateFormatVisibility(field.type);
 	}
 
 	private createTestingSection() {
@@ -223,8 +291,8 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 		let testResults = testContainer.createDiv();
 
 		new Setting(testContainer)
-			.setName('Test Frontmatter')
-			.setDesc('Enter YAML frontmatter to test against your rulesets')
+			.setName('Test Properties')
+			.setDesc('Enter YAML properties to test against your rulesets')
 			.addTextArea(text => {
 				text.setPlaceholder('type: O3\nattendees: []\ndate: 2024-01-01')
 					.onChange((value) => {
@@ -249,8 +317,8 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 		try {
 			let frontmatter: any;
 			if (frontmatterText.trim()) {
-				const yaml = require('yaml');
-				frontmatter = yaml.parse(frontmatterText);
+				// Use the same YAML parser we use in the settings interface
+				frontmatter = this.yamlToObject(frontmatterText);
 			} else {
 				frontmatter = {};
 			}
@@ -274,18 +342,26 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 
 				if (evaluation.ruleset.title) {
 					const generatedTitle = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset);
-					// Process title with populated metadata
-					const titleResult = evaluation.ruleset.title.replace(/\{([^}]+)\}/g, (match, field) => {
-						return generatedTitle[field] || match;
-					});
+					// Create a mock file object for testing
+					const mockFile = {
+						stat: {
+							ctime: Date.now() // Use current time as creation time for testing
+						}
+					};
+					// Process title with populated metadata using PlaceholderProcessor
+					const titleResult = this.processPlaceholdersForTesting(evaluation.ruleset.title, generatedTitle, mockFile);
 					resultsList.createEl('li', { text: `📝 Generated title: "${titleResult}"` });
 				}
 
 				if (evaluation.ruleset.path) {
 					const generatedMeta = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset);
-					const pathResult = evaluation.ruleset.path.replace(/\{([^}]+)\}/g, (match, field) => {
-						return generatedMeta[field] || match;
-					});
+					// Create a mock file object for testing
+					const mockFile = {
+						stat: {
+							ctime: Date.now() // Use current time as creation time for testing
+						}
+					};
+					const pathResult = this.processPlaceholdersForTesting(evaluation.ruleset.path, generatedMeta, mockFile);
 					resultsList.createEl('li', { text: `📁 Generated path: "${pathResult}"` });
 				}
 			}
@@ -296,5 +372,123 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 				attr: { style: 'color: var(--text-error);' }
 			});
 		}
+	}
+
+	private objectToYaml(obj: Record<string, any>): string {
+		if (!obj || Object.keys(obj).length === 0) {
+			return '';
+		}
+
+		const lines: string[] = [];
+		for (const [key, value] of Object.entries(obj)) {
+			if (typeof value === 'string') {
+				// Quote strings that might need it
+				if (value.includes(':') || value.includes('"') || value.includes("'") || 
+					value.includes('\n') || value.includes('#') || /^\s/.test(value) || /\s$/.test(value)) {
+					lines.push(`${key}: "${value.replace(/"/g, '\\"')}"`);
+				} else {
+					lines.push(`${key}: ${value}`);
+				}
+			} else if (Array.isArray(value)) {
+				if (value.length === 0) {
+					lines.push(`${key}: []`);
+				} else {
+					lines.push(`${key}:`);
+					for (const item of value) {
+						lines.push(`  - ${this.escapeYamlValue(item)}`);
+					}
+				}
+			} else {
+				lines.push(`${key}: ${value}`);
+			}
+		}
+		return lines.join('\n');
+	}
+
+	private yamlToObject(yamlString: string): Record<string, any> {
+		if (!yamlString.trim()) {
+			return {};
+		}
+
+		// Simple YAML parser for basic key-value pairs
+		const lines = yamlString.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+		const result: Record<string, any> = {};
+		
+		let currentKey = '';
+		let currentArray: any[] = [];
+		let inArray = false;
+
+		for (const line of lines) {
+			if (line.startsWith('- ')) {
+				// Array item
+				if (inArray) {
+					const value = line.substring(2).trim();
+					currentArray.push(this.parseYamlValue(value));
+				}
+			} else if (line.includes(':')) {
+				// Key-value pair
+				if (inArray && currentKey) {
+					result[currentKey] = currentArray;
+					currentArray = [];
+					inArray = false;
+				}
+
+				const colonIndex = line.indexOf(':');
+				const key = line.substring(0, colonIndex).trim();
+				const value = line.substring(colonIndex + 1).trim();
+				
+				if (value === '') {
+					// Might be start of array
+					currentKey = key;
+					inArray = true;
+					currentArray = [];
+				} else if (value === '[]') {
+					result[key] = [];
+				} else {
+					result[key] = this.parseYamlValue(value);
+				}
+			}
+		}
+
+		// Handle final array
+		if (inArray && currentKey) {
+			result[currentKey] = currentArray;
+		}
+
+		return result;
+	}
+
+	private parseYamlValue(value: string): any {
+		// Remove quotes if present
+		if ((value.startsWith('"') && value.endsWith('"')) || 
+			(value.startsWith("'") && value.endsWith("'"))) {
+			return value.slice(1, -1).replace(/\\"/g, '"');
+		}
+		
+		// Try to parse as number
+		if (!isNaN(Number(value))) {
+			return Number(value);
+		}
+		
+		// Parse booleans
+		if (value === 'true') return true;
+		if (value === 'false') return false;
+		if (value === 'null') return null;
+		
+		return value;
+	}
+
+	private escapeYamlValue(value: any): string {
+		if (typeof value === 'string') {
+			if (value.includes(':') || value.includes('"') || value.includes("'") || 
+				value.includes('\n') || value.includes('#')) {
+				return `"${value.replace(/"/g, '\\"')}"`;
+			}
+		}
+		return String(value);
+	}
+
+	private processPlaceholdersForTesting(template: string, frontmatter: Record<string, any>, mockFile: any): string {
+		return PlaceholderProcessor.processPlaceholders(template, frontmatter, mockFile);
 	}
 }

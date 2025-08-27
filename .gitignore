@@ -9,6 +9,7 @@ node_modules/
 main.js
 *.js.map
 lib/
+build/
 
 # OS generated files
 .DS_Store

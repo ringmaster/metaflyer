@@ -1,15 +1,15 @@
 # Metaflyer
 
-A powerful Obsidian plugin that enforces metadata rules and automatically organizes your notes based on defined rulesets.
+A powerful Obsidian plugin that enforces properties rules and automatically organizes your notes based on defined rulesets.
 
 ## Features
 
-- **Automatic Metadata Population**: When you set a trigger field (like `type: O3`), the plugin instantly populates all required metadata fields
-- **Visual Feedback System**: Clear alerts show you when metadata is missing, incomplete, or ready for organization
+- **Automatic Properties Population**: When you set a trigger field (like `type: O3`), the plugin instantly populates all required properties fields
+- **Visual Feedback System**: Clear alerts show you when properties are missing, incomplete, or ready for organization
 - **Smart Auto-Organization**: Automatically rename and move notes to the correct location using customizable templates
-- **Flexible Rulesets**: Define custom rules for different note types with metadata requirements, title templates, and organization paths
+- **Flexible Rulesets**: Define custom rules for different note types with properties requirements, title templates, and organization paths
 - **Real-time Monitoring**: Works on all notes vault-wide, regardless of age or location
-- **Smart Placeholders**: Use `{fieldName}` placeholders in titles and paths that automatically populate with metadata values
+- **Smart Placeholders**: Use `{fieldName}` placeholders in titles and paths that automatically populate with properties values
 
 ## Quick Start
 
@@ -36,32 +36,32 @@ date: 2024-01-01
 
 When complete, notes are automatically titled as `{attendees} O3 - {date}` and moved to `Areas/Work/O3s/{attendees}/`.
 
-## Keyboard Shortcuts
+## Commands
 
-- **Ctrl+Shift+M**: Organize current note (rename and move to correct location)
+- **Organize Note (Rename & Move)**: Available in Command Palette when note is complete and matches a ruleset (hotkey customizable in Obsidian settings)
 
 ## Settings
 
 ### Rulesets Tab
-Create and manage your metadata rulesets with:
-- **Metadata Match**: Conditions that trigger the ruleset (e.g., `{"type": "O3"}`)
+Create and manage your properties rulesets with:
+- **Properties Match**: Conditions that trigger the ruleset (e.g., `type: O3`)
 - **Required Fields**: Define field types (string, array, date, number, boolean)
 - **Title Template**: Auto-generate titles using `{fieldName}` placeholders
 - **Path Template**: Define organization paths using `{fieldName}` placeholders
 
 ### Testing Tab
-Test your rulesets with sample frontmatter to see how they'll behave.
+Test your rulesets with sample properties to see how they'll behave.
 
 ## Visual States
 
-- **Yellow Border + ⚠️**: Missing metadata or incomplete ruleset
-- **Green Alert + ✅**: Complete metadata, ready to organize
+- **Yellow Border + ⚠️**: Missing properties or incomplete ruleset
+- **Green Alert + ☑️**: Complete properties, ready to organize
 - **No Visual Changes**: Note is complete and in the correct location
 
 ## Smart Placeholders
 
 Use these placeholders in title and path templates:
-- `{fieldName}`: Insert any frontmatter field value
+- `{fieldName}`: Insert any properties field value
 - `{date:YYYY-MM-DD}`: Format dates with custom patterns
 - `{attendees}`: Arrays become comma-separated strings
 
