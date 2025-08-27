@@ -89,8 +89,14 @@ jobs:
       - name: Create release tag
         id: create_tag
         run: |
-          TAG="v${{ steps.get_version.outputs.version }}-build-${{ steps.date.outputs.date }}"
+          TAG="${{ steps.get_version.outputs.version }}-build-${{ steps.date.outputs.date }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download build artifacts for release
+        uses: actions/download-artifact@v4
+        with:
+          name: metaflyer-obsidian-plugin
+          path: release-files
 
       - name: Create GitHub Release
         run: |
@@ -104,9 +110,10 @@ jobs:
           **Commit:** ${{ github.sha }}
 
           ### Installation
-          1. Download \`metaflyer-plugin.zip\` below
-          2. Extract the contents to your Obsidian vault's \`.obsidian/plugins/metaflyer/\` directory
-          3. Enable the plugin in Obsidian's Community Plugins settings
+          1. Download \`metaflyer-plugin.zip\` below, OR
+          2. Download individual files (\`main.js\`, \`manifest.json\`, \`styles.css\`) below
+          3. Extract/copy the contents to your Obsidian vault's \`.obsidian/plugins/metaflyer/\` directory
+          4. Enable the plugin in Obsidian's Community Plugins settings
 
           ### What's Included
           - \`main.js\` - Compiled plugin code
@@ -117,6 +124,9 @@ jobs:
           *This is an automated build release. For stable releases, look for releases without the \"prerelease\" label.*" \
             --prerelease \
             --target main \
-            metaflyer-plugin.zip
+            metaflyer-plugin.zip \
+            release-files/build/main.js \
+            release-files/build/manifest.json \
+            release-files/build/styles.css
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

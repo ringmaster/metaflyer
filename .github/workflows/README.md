@@ -77,15 +77,29 @@ This directory contains GitHub Actions workflows for automated building, testing
 
 ### Automatic Releases (Prereleases)
 - **Created**: Every push to `main` branch
-- **Format**: `v{version}-build-{timestamp}` (e.g., `v1.0.0-build-20231215-143022`)
+- **Format**: `{version}-build-{timestamp}` (e.g., `1.0.0-build-20231215-143022`)
 - **Marked as**: Prerelease
 - **Purpose**: Latest development builds for testing
+- **Version Source**: Reads current version from `manifest.json` in the repository
 
 ### Manual Releases (Stable)
 - **Created**: Via workflow dispatch
-- **Format**: `v{version}` (e.g., `v1.0.0`)
+- **Format**: `{version}` (e.g., `1.0.0`)
 - **Marked as**: Stable release or prerelease (based on input)
 - **Purpose**: Official releases for distribution
+- **Version Source**: User-specified version that updates `manifest.json` and `package.json`
+
+## Version System
+
+### How Versions Work
+- **Automatic builds**: Use the current version from `manifest.json` + build timestamp
+- **Manual releases**: User specifies version, which updates both `manifest.json` and `package.json`
+- **Tag format**: No "v" prefix - uses semantic version directly (e.g., `1.0.0` not `v1.0.0`)
+
+### Updating the Version
+To change the version for automatic builds:
+1. Edit `manifest.json` and update the `"version"` field
+2. Push to main - next build will use the new version
 
 ## Downloading Artifacts
 
@@ -99,7 +113,8 @@ This directory contains GitHub Actions workflows for automated building, testing
 1. Go to Releases page
 2. **For latest development**: Download from the newest prerelease
 3. **For stable versions**: Download from releases without "prerelease" label
-4. Extract to `.obsidian/plugins/metaflyer/` in your vault
+4. **Download options**: Either the complete zip file OR individual files (`main.js`, `manifest.json`, `styles.css`)
+5. Extract/copy to `.obsidian/plugins/metaflyer/` in your vault
 
 ## Installation Instructions
 When distributing the plugin, include these instructions:
@@ -110,7 +125,8 @@ When distributing the plugin, include these instructions:
 
 ### For Development Testing
 1. Download `metaflyer-plugin.zip` from the latest prerelease
-2. Or download from Actions artifacts for the very latest build
+2. Or download individual files (`main.js`, `manifest.json`, `styles.css`) directly from the release
+3. Or download from Actions artifacts for the very latest build
 
 ### Installation Steps
 1. Extract the downloaded zip file

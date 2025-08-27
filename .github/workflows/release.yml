@@ -86,7 +86,7 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          gh release create "v${{ steps.get_version.outputs.version }}" \
+          gh release create "${{ steps.get_version.outputs.version }}" \
             --title "Metaflyer v${{ steps.get_version.outputs.version }}" \
             --notes "## Metaflyer v${{ steps.get_version.outputs.version }}
 
