@@ -65,6 +65,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 							path: '',
 							autoTitleMode: 'always',
 							enableAutoMove: true,
+							search_criteria: '',
 							behaviors: {}
 						};
 						this.plugin.settings.rulesets.push(newRuleset);
@@ -134,6 +135,18 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 						ruleset.path = value;
 						await this.plugin.saveSettings();
 					});
+			});
+
+		new Setting(rulesetContainer)
+			.setName('Search Criteria')
+			.setDesc('Search pattern with placeholders (e.g., ["type":"{type}"]["attendees":"{attendees}"])')
+			.addText(text => {
+				text.setValue(ruleset.search_criteria || '')
+					.onChange(async (value) => {
+						ruleset.search_criteria = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = '100%';
 			});
 
 		new Setting(rulesetContainer)

@@ -4,6 +4,7 @@ import { MetaflyerSettingsTab } from './settings/settings-tab';
 import { RulesetManager } from './core/ruleset-manager';
 import { MetadataEnforcer } from './enforcement/metadata-enforcer';
 import { AutoOrganizer } from './organization/auto-organizer';
+import { MetaflyerSidebar, METAFLYER_SIDEBAR_TYPE } from './sidebar/metaflyer-sidebar';
 
 export default class MetaflyerPlugin extends Plugin {
 	settings: MetaflyerSettings;
@@ -19,6 +20,21 @@ export default class MetaflyerPlugin extends Plugin {
 		this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
 
 		this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
+
+		// Register the sidebar view
+		this.registerView(
+			METAFLYER_SIDEBAR_TYPE,
+			(leaf) => new MetaflyerSidebar(leaf, this)
+		);
+
+		// Add command to open sidebar
+		this.addCommand({
+			id: 'open-metaflyer-sidebar',
+			name: 'Open Metaflyer Sidebar',
+			callback: () => {
+				this.activateSidebar();
+			}
+		});
 
 		this.addCommand({
 			id: 'organize-note',
@@ -106,6 +122,8 @@ export default class MetaflyerPlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(() => {
 			this.metadataEnforcer.evaluateAllFiles();
+			// Auto-open the sidebar on first load
+			this.activateSidebar();
 		});
 	}
 
@@ -121,6 +139,24 @@ export default class MetaflyerPlugin extends Plugin {
 		await this.saveData(this.settings);
 		this.rulesetManager.updateSettings(this.settings);
 		this.metadataEnforcer.updateSettings(this.settings.enableWarnings);
+	}
+
+	async activateSidebar() {
+		const existing = this.app.workspace.getLeavesOfType(METAFLYER_SIDEBAR_TYPE);
+		
+		if (existing.length > 0) {
+			// Sidebar already exists, just focus it
+			this.app.workspace.revealLeaf(existing[0]);
+		} else {
+			// Create new sidebar
+			const leaf = this.app.workspace.getRightLeaf(false);
+			if (leaf) {
+				await leaf.setViewState({
+					type: METAFLYER_SIDEBAR_TYPE,
+					active: true
+				});
+			}
+		}
 	}
 
 	showRulesetSelector() {

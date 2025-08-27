@@ -15,6 +15,7 @@ export interface Ruleset {
 	path?: string;
 	autoTitleMode?: AutoTitleMode;
 	enableAutoMove?: boolean;
+	search_criteria?: string;
 	behaviors?: {
 		pull_forward?: boolean;
 		create_tasks?: boolean;
@@ -50,6 +51,7 @@ export const DEFAULT_SETTINGS: MetaflyerSettings = {
 			path: "Areas/Work/O3s/{attendees}",
 			autoTitleMode: 'always',
 			enableAutoMove: true,
+			search_criteria: '["type":"{type}"]["attendees":"{attendees}"]',
 			behaviors: {
 				pull_forward: true,
 				create_tasks: true

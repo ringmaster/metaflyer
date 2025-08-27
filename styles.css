@@ -97,3 +97,74 @@
     border: none;
     padding: 5px 0;
 }
+
+/* Sidebar styling */
+.metaflyer-sidebar {
+    padding: 10px;
+}
+
+.metaflyer-content {
+    font-size: 0.9em;
+}
+
+.ruleset-info {
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+.ruleset-info h4 {
+    color: var(--text-accent);
+    margin: 0 0 5px 0;
+}
+
+.ruleset-info p {
+    margin: 0;
+    font-family: var(--font-monospace);
+    font-size: 0.85em;
+    color: var(--text-muted);
+    word-wrap: break-word;
+}
+
+.metaflyer-search-results {
+    margin-top: 15px;
+}
+
+.metaflyer-search-results ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.metaflyer-search-results li {
+    background-color: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 3px;
+    padding: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.metaflyer-search-results li:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.metaflyer-search-results li .file-name {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.metaflyer-search-results li .file-path {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.metaflyer-search-results li .file-metadata {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
