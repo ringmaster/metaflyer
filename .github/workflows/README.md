@@ -21,14 +21,19 @@ This directory contains GitHub Actions workflows for automated building, testing
 - Valid JavaScript syntax in compiled output
 - Valid JSON structure in manifest with required fields
 
-### 2. Build and Create Artifact (`build.yml`)
+### 2. Build and Release (`build.yml`)
 **Triggers:** Push to `main`/`develop` branches, Pull requests to `main`, Manual dispatch
 
-**Purpose:** Creates downloadable build artifacts
+**Purpose:** Creates downloadable build artifacts and automatic releases
+
+**Jobs:**
+- **build**: Creates build artifacts (runs for all triggers)
+- **release**: Creates automatic releases (only for pushes to `main`)
 
 **Output:**
 - `metaflyer-obsidian-plugin`: Complete build directory + zip file (30-day retention)
 - `metaflyer-plugin-zip`: Ready-to-install zip file (90-day retention)
+- **Automatic Release**: Creates a prerelease on every push to `main`
 
 **Artifacts include:**
 - `main.js` - Compiled plugin code
@@ -36,54 +41,80 @@ This directory contains GitHub Actions workflows for automated building, testing
 - `styles.css` - Plugin styles
 - `metaflyer-plugin.zip` - Installation-ready archive
 
-### 3. Release (`release.yml`)
-**Triggers:** Push of Git tags (e.g., `v1.0.0`, `1.2.3`)
+### 3. Manual Release (`release.yml`)
+**Triggers:** Manual workflow dispatch with version input
 
-**Purpose:** Creates GitHub releases with downloadable assets
+**Purpose:** Creates official stable releases with proper versioning
 
 **What it does:**
-- Builds the plugin
-- Creates a versioned zip file (`metaflyer-{version}.zip`)
-- Creates a GitHub release with automatic release notes
-- Uploads individual files (`main.js`, `manifest.json`, `styles.css`)
-- Uploads the complete plugin zip
+- Updates `manifest.json` and `package.json` versions
+- Builds the plugin with the specified version
+- Creates a Git tag and commits version changes
+- Creates a GitHub release (stable or prerelease based on input)
+- Uploads versioned zip file and individual assets
 
 ## Usage
 
 ### For Development
-- **Push/PR to main**: Triggers CI checks and build artifact creation
+- **Push/PR to main**: Triggers CI checks, build artifacts, and **automatic release**
 - **Push/PR to develop**: Triggers CI checks and build artifact creation
-- All workflows run automatically - no manual intervention needed
+- **Automatic releases**: Every push to `main` creates a timestamped prerelease
 
-### For Releases
-1. Update version in `manifest.json` and `package.json`
-2. Commit and push changes
-3. Create and push a git tag: `git tag v1.0.0 && git push origin v1.0.0`
-4. The release workflow will automatically create a GitHub release
+### For Stable Releases
+1. Navigate to Actions tab in GitHub
+2. Select "Manual Release" workflow
+3. Click "Run workflow" button
+4. Enter the version number (e.g., "1.0.0")
+5. Choose whether it's a prerelease or stable release
+6. The workflow will update versions, create tags, and publish the release
 
 ### Manual Builds
 - Navigate to Actions tab in GitHub
-- Select "Build and Create Artifact" workflow
+- Select "Build and Release" workflow
 - Click "Run workflow" button
+
+## Release Types
+
+### Automatic Releases (Prereleases)
+- **Created**: Every push to `main` branch
+- **Format**: `v{version}-build-{timestamp}` (e.g., `v1.0.0-build-20231215-143022`)
+- **Marked as**: Prerelease
+- **Purpose**: Latest development builds for testing
+
+### Manual Releases (Stable)
+- **Created**: Via workflow dispatch
+- **Format**: `v{version}` (e.g., `v1.0.0`)
+- **Marked as**: Stable release or prerelease (based on input)
+- **Purpose**: Official releases for distribution
 
 ## Downloading Artifacts
 
-### From Workflow Runs
+### From Automatic Builds
 1. Go to the Actions tab
-2. Click on a completed workflow run
+2. Click on a completed "Build and Release" workflow run
 3. Scroll to "Artifacts" section
 4. Download `metaflyer-plugin-zip` for installation
 
-### From Releases
+### From Releases Page
 1. Go to Releases page
-2. Download the versioned zip file
-3. Extract to `.obsidian/plugins/metaflyer/` in your vault
+2. **For latest development**: Download from the newest prerelease
+3. **For stable versions**: Download from releases without "prerelease" label
+4. Extract to `.obsidian/plugins/metaflyer/` in your vault
 
 ## Installation Instructions
 When distributing the plugin, include these instructions:
 
-1. Download the latest `metaflyer-{version}.zip` from the Releases page
-2. Extract the contents to your Obsidian vault's `.obsidian/plugins/metaflyer/` directory
+### For Stable Releases
+1. Download the latest `metaflyer-v{version}.zip` from the Releases page
+2. Choose a stable release (not marked as "prerelease")
+
+### For Development Testing
+1. Download `metaflyer-plugin.zip` from the latest prerelease
+2. Or download from Actions artifacts for the very latest build
+
+### Installation Steps
+1. Extract the downloaded zip file
+2. Copy contents to your Obsidian vault's `.obsidian/plugins/metaflyer/` directory
 3. Ensure the directory structure looks like:
    ```
    .obsidian/plugins/metaflyer/

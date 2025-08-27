@@ -1,4 +1,4 @@
-name: Build and Create Artifact
+name: Build and Release
 
 on:
   push:
@@ -59,3 +59,78 @@ jobs:
           name: metaflyer-plugin-zip
           path: metaflyer-plugin.zip
           retention-days: 90
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Extract version from manifest
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: metaflyer-plugin-zip
+
+      - name: Create release tag
+        id: create_tag
+        run: |
+          TAG="v${{ steps.get_version.outputs.version }}-build-${{ steps.date.outputs.date }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.create_tag.outputs.tag }}
+          release_name: "Metaflyer v${{ steps.get_version.outputs.version }} (Build ${{ steps.date.outputs.date }})"
+          draft: false
+          prerelease: true
+          body: |
+            ## Automated Build Release
+
+            **Version:** ${{ steps.get_version.outputs.version }}
+            **Build Date:** ${{ steps.date.outputs.date }}
+            **Branch:** main
+            **Commit:** ${{ github.sha }}
+
+            ### Installation
+            1. Download `metaflyer-plugin.zip` below
+            2. Extract the contents to your Obsidian vault's `.obsidian/plugins/metaflyer/` directory
+            3. Enable the plugin in Obsidian's Community Plugins settings
+
+            ### What's Included
+            - `main.js` - Compiled plugin code
+            - `manifest.json` - Plugin manifest
+            - `styles.css` - Plugin styles
+
+            ---
+            *This is an automated build release. For stable releases, look for releases without the "prerelease" label.*
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./metaflyer-plugin.zip
+          asset_name: metaflyer-plugin.zip
+          asset_content_type: application/zip

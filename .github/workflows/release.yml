@@ -1,9 +1,17 @@
-name: Release
+name: Manual Release
 
 on:
-  push:
-    tags:
-      - "*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 1.0.0)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as prerelease"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   release:
@@ -34,14 +42,44 @@ jobs:
           test -f build/manifest.json && echo "✅ manifest.json exists"
           test -f build/styles.css && echo "✅ styles.css exists"
 
-      - name: Extract version from tag
+      - name: Set version
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Update manifest version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            manifest.version = '${{ github.event.inputs.version }}';
+            fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
+          "
+
+      - name: Update package.json version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${{ github.event.inputs.version }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Commit version updates
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add manifest.json package.json
+          git commit -m "Release v${{ github.event.inputs.version }}" || echo "No changes to commit"
+
+      - name: Create and push tag
+        run: |
+          git tag v${{ github.event.inputs.version }}
+          git push origin HEAD --tags
 
       - name: Create plugin archive
         run: |
           cd build
-          zip -r ../metaflyer-${{ steps.get_version.outputs.version }}.zip ./*
+          zip -r ../metaflyer-v${{ steps.get_version.outputs.version }}.zip ./*
           cd ..
 
       - name: Create GitHub Release
@@ -50,22 +88,33 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ steps.get_version.outputs.version }}
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: "Metaflyer v${{ steps.get_version.outputs.version }}"
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event.inputs.prerelease }}
           body: |
-            ## Changes in ${{ steps.get_version.outputs.version }}
+            ## Metaflyer v${{ steps.get_version.outputs.version }}
+
+            **Release Type:** ${{ github.event.inputs.prerelease == 'true' && 'Pre-release' || 'Stable Release' }}
 
             ### Installation
-            1. Download `metaflyer-${{ steps.get_version.outputs.version }}.zip`
+            1. Download `metaflyer-v${{ steps.get_version.outputs.version }}.zip` below
             2. Extract the contents to your Obsidian vault's `.obsidian/plugins/metaflyer/` directory
             3. Enable the plugin in Obsidian's Community Plugins settings
 
-            ### Files included:
-            - `main.js` - Plugin code
+            ### Plugin Features
+            - **Metadata Enforcement**: Automatic validation and population of note metadata
+            - **Auto-Organization**: Smart file naming and folder organization based on rulesets
+            - **Visual Feedback**: Color-coded alerts showing completion status
+            - **Configurable Rulesets**: Flexible rule configuration for different note types
+
+            ### Files Included
+            - `main.js` - Compiled plugin code
             - `manifest.json` - Plugin manifest
             - `styles.css` - Plugin styles
+
+            ---
+            *This is a manually created release. For the latest automated builds, check releases marked as "prerelease".*
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -73,8 +122,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./metaflyer-${{ steps.get_version.outputs.version }}.zip
-          asset_name: metaflyer-${{ steps.get_version.outputs.version }}.zip
+          asset_path: ./metaflyer-v${{ steps.get_version.outputs.version }}.zip
+          asset_name: metaflyer-v${{ steps.get_version.outputs.version }}.zip
           asset_content_type: application/zip
 
       - name: Upload main.js
