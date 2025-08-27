@@ -16,6 +16,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -71,11 +73,6 @@ jobs:
           git add manifest.json package.json
           git commit -m "Release v${{ github.event.inputs.version }}" || echo "No changes to commit"
 
-      - name: Create and push tag
-        run: |
-          git tag v${{ github.event.inputs.version }}
-          git push origin HEAD --tags
-
       - name: Create plugin archive
         run: |
           cd build
@@ -83,75 +80,41 @@ jobs:
           cd ..
 
       - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ github.event.inputs.prerelease }}" == "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          gh release create "v${{ steps.get_version.outputs.version }}" \
+            --title "Metaflyer v${{ steps.get_version.outputs.version }}" \
+            --notes "## Metaflyer v${{ steps.get_version.outputs.version }}
+
+          **Release Type:** ${{ github.event.inputs.prerelease == 'true' && 'Pre-release' || 'Stable Release' }}
+
+          ### Installation
+          1. Download \`metaflyer-v${{ steps.get_version.outputs.version }}.zip\` below
+          2. Extract the contents to your Obsidian vault's \`.obsidian/plugins/metaflyer/\` directory
+          3. Enable the plugin in Obsidian's Community Plugins settings
+
+          ### Plugin Features
+          - **Metadata Enforcement**: Automatic validation and population of note metadata
+          - **Auto-Organization**: Smart file naming and folder organization based on rulesets
+          - **Visual Feedback**: Color-coded alerts showing completion status
+          - **Configurable Rulesets**: Flexible rule configuration for different note types
+
+          ### Files Included
+          - \`main.js\` - Compiled plugin code
+          - \`manifest.json\` - Plugin manifest
+          - \`styles.css\` - Plugin styles
+
+          ---
+          *This is a manually created release. For the latest automated builds, check releases marked as \"prerelease\".*" \
+            $PRERELEASE_FLAG \
+            --target main \
+            metaflyer-v${{ steps.get_version.outputs.version }}.zip \
+            build/main.js \
+            build/manifest.json \
+            build/styles.css
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: "Metaflyer v${{ steps.get_version.outputs.version }}"
-          draft: false
-          prerelease: ${{ github.event.inputs.prerelease }}
-          body: |
-            ## Metaflyer v${{ steps.get_version.outputs.version }}
-
-            **Release Type:** ${{ github.event.inputs.prerelease == 'true' && 'Pre-release' || 'Stable Release' }}
-
-            ### Installation
-            1. Download `metaflyer-v${{ steps.get_version.outputs.version }}.zip` below
-            2. Extract the contents to your Obsidian vault's `.obsidian/plugins/metaflyer/` directory
-            3. Enable the plugin in Obsidian's Community Plugins settings
-
-            ### Plugin Features
-            - **Metadata Enforcement**: Automatic validation and population of note metadata
-            - **Auto-Organization**: Smart file naming and folder organization based on rulesets
-            - **Visual Feedback**: Color-coded alerts showing completion status
-            - **Configurable Rulesets**: Flexible rule configuration for different note types
-
-            ### Files Included
-            - `main.js` - Compiled plugin code
-            - `manifest.json` - Plugin manifest
-            - `styles.css` - Plugin styles
-
-            ---
-            *This is a manually created release. For the latest automated builds, check releases marked as "prerelease".*
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./metaflyer-v${{ steps.get_version.outputs.version }}.zip
-          asset_name: metaflyer-v${{ steps.get_version.outputs.version }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload main.js
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/main.js
-          asset_name: main.js
-          asset_content_type: application/javascript
-
-      - name: Upload manifest.json
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/manifest.json
-          asset_name: manifest.json
-          asset_content_type: application/json
-
-      - name: Upload styles.css
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/styles.css
-          asset_name: styles.css
-          asset_content_type: text/css
