@@ -39,6 +39,7 @@ When complete, notes are automatically titled as `{attendees} O3 - {date}` and m
 ## Commands
 
 - **Organize Note (Rename & Move)**: Available in Command Palette when note is complete and matches a ruleset (hotkey customizable in Obsidian settings)
+- **Paste Rich Text as Markdown**: Convert rich text from clipboard to markdown before pasting (default hotkey: `Ctrl/Cmd+Shift+V`)
 
 ## Settings
 
@@ -64,6 +65,15 @@ Use these placeholders in title and path templates:
 - `{fieldName}`: Insert any properties field value
 - `{date:YYYY-MM-DD}`: Format dates with custom patterns
 - `{attendees}`: Arrays become comma-separated strings
+
+## Rich Text Clipboard
+
+The **Paste Rich Text as Markdown** command allows you to:
+- Copy formatted text from any application (web browsers, Word, etc.)
+- Paste it directly into Obsidian as properly formatted markdown
+- Supports common formatting: headers, bold, italic, links, lists, blockquotes, code blocks, and tables
+- Automatically converts HTML entities and cleans up formatting
+- Available via Command Palette or hotkey (`Ctrl/Cmd+Shift+V`)
 
 ## Development
 
