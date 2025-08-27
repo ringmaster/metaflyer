@@ -1,0 +1,61 @@
+name: Build and Create Artifact
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          echo "Build directory contents:"
+          ls -la build/
+          echo "Verifying required files exist:"
+          test -f build/main.js && echo "✅ main.js exists"
+          test -f build/manifest.json && echo "✅ manifest.json exists"
+          test -f build/styles.css && echo "✅ styles.css exists"
+
+      - name: Create plugin archive
+        run: |
+          cd build
+          zip -r ../metaflyer-plugin.zip ./*
+          cd ..
+          echo "Archive contents:"
+          unzip -l metaflyer-plugin.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaflyer-obsidian-plugin
+          path: |
+            build/
+            metaflyer-plugin.zip
+          retention-days: 30
+
+      - name: Upload plugin zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaflyer-plugin-zip
+          path: metaflyer-plugin.zip
+          retention-days: 90
