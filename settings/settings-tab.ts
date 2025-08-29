@@ -80,24 +80,53 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 
 		const rulesetContainer = containerEl.createDiv('metaflyer-ruleset-container');
 		rulesetContainer.style.border = '1px solid var(--background-modifier-border)';
-		rulesetContainer.style.padding = '15px';
 		rulesetContainer.style.marginBottom = '15px';
 		rulesetContainer.style.borderRadius = '5px';
 
-		rulesetContainer.createEl('h4', { text: `Ruleset: ${ruleset.name}` });
+		// Create collapsible header
+		const headerContainer = rulesetContainer.createDiv('metaflyer-ruleset-header');
+		headerContainer.style.padding = '15px';
+		headerContainer.style.cursor = 'pointer';
+		headerContainer.style.display = 'flex';
+		headerContainer.style.alignItems = 'center';
+		headerContainer.style.borderBottom = '1px solid var(--background-modifier-border)';
 
-		new Setting(rulesetContainer)
+		const toggleIcon = headerContainer.createSpan('metaflyer-toggle-icon');
+		toggleIcon.textContent = '▶';
+		toggleIcon.style.marginRight = '8px';
+		toggleIcon.style.fontSize = '12px';
+		toggleIcon.style.transition = 'transform 0.2s ease';
+
+		const titleEl = headerContainer.createEl('h4', { text: `${ruleset.name}` });
+		titleEl.style.margin = '0';
+		titleEl.style.flexGrow = '1';
+
+		// Create content container (collapsed by default)
+		const contentContainer = rulesetContainer.createDiv('metaflyer-ruleset-content');
+		contentContainer.style.display = 'none';
+		contentContainer.style.padding = '15px';
+
+		// Toggle functionality
+		let isExpanded = false;
+		headerContainer.onclick = () => {
+			isExpanded = !isExpanded;
+			contentContainer.style.display = isExpanded ? 'block' : 'none';
+			toggleIcon.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+		};
+
+		new Setting(contentContainer)
 			.setName('Name')
 			.setDesc('Name for this ruleset')
 			.addText(text => {
 				text.setValue(ruleset.name)
 					.onChange(async (value) => {
 						ruleset.name = value;
+						titleEl.textContent = value; // Update header title
 						await this.plugin.saveSettings();
 					});
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Properties Match')
 			.setDesc('YAML object defining when this ruleset applies (e.g., type: O3)')
 			.addTextArea(text => {
@@ -115,7 +144,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 				text.inputEl.rows = 3;
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Title Template')
 			.setDesc('Template for auto-generated titles (use {fieldName} placeholders)')
 			.addText(text => {
@@ -126,7 +155,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Path Template')
 			.setDesc('Template for auto-organization path (use {fieldName} placeholders)')
 			.addText(text => {
@@ -137,7 +166,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Search Criteria')
 			.setDesc('Search pattern with placeholders (e.g., ["type":"{type}"]["attendees":"{attendees}"])')
 			.addText(text => {
@@ -149,7 +178,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 				text.inputEl.style.width = '100%';
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Auto Title Mode')
 			.setDesc('When to change note titles using the title template')
 			.addDropdown(dropdown => {
@@ -163,7 +192,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Enable Auto Move')
 			.setDesc('Automatically move notes to path location when organizing')
 			.addToggle(toggle => {
@@ -174,7 +203,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		const metadataContainer = rulesetContainer.createDiv();
+		const metadataContainer = contentContainer.createDiv();
 		metadataContainer.createEl('h5', { text: 'Required Properties Fields' });
 
 		for (let i = 0; i < ruleset.metadata.length; i++) {
@@ -197,7 +226,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(rulesetContainer)
+		new Setting(contentContainer)
 			.setName('Delete Ruleset')
 			.setDesc('Remove this ruleset permanently')
 			.addButton(button => {

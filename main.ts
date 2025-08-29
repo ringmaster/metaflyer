@@ -15,6 +15,7 @@ import {
   METAFLYER_SIDEBAR_TYPE,
 } from "./sidebar/metaflyer-sidebar";
 import { ClipboardUtils } from "./core/clipboard-utils";
+import { placeholderMarkerExtension, navigateToMarker } from "./core/placeholder-markers";
 
 export default class MetaflyerPlugin extends Plugin {
   settings: MetaflyerSettings;
@@ -34,6 +35,9 @@ export default class MetaflyerPlugin extends Plugin {
     this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
 
     this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
+
+    // Register placeholder marker extension
+    this.registerEditorExtension(placeholderMarkerExtension);
 
     // Register the sidebar view
     this.registerView(
@@ -125,6 +129,36 @@ export default class MetaflyerPlugin extends Plugin {
       name: "Test HTML to Markdown Conversion",
       callback: () => {
         ClipboardUtils.testHtmlToMarkdown();
+      },
+    });
+
+    this.addCommand({
+      id: "go-to-next-placeholder-marker",
+      name: "Go to next placeholder marker",
+      editorCallback: (editor, view) => {
+        if (view instanceof MarkdownView) {
+          // @ts-ignore - access CodeMirror instance
+          const editorView = editor.cm;
+          const success = navigateToMarker(editorView, 'next');
+          if (!success) {
+            new Notice("No placeholder markers found");
+          }
+        }
+      },
+    });
+
+    this.addCommand({
+      id: "go-to-previous-placeholder-marker", 
+      name: "Go to previous placeholder marker",
+      editorCallback: (editor, view) => {
+        if (view instanceof MarkdownView) {
+          // @ts-ignore - access CodeMirror instance
+          const editorView = editor.cm;
+          const success = navigateToMarker(editorView, 'prev');
+          if (!success) {
+            new Notice("No placeholder markers found");
+          }
+        }
       },
     });
 
