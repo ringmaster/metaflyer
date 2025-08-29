@@ -1,0 +1,85 @@
+name: Tag Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          echo "Build directory contents:"
+          ls -la build/
+          echo "Verifying required files exist:"
+          test -f build/main.js && echo "✅ main.js exists"
+          test -f build/manifest.json && echo "✅ manifest.json exists"
+          test -f build/styles.css && echo "✅ styles.css exists"
+
+      - name: Extract tag version
+        id: get_version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "version=$TAG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Create plugin archive
+        run: |
+          cd build
+          zip -r ../metaflyer-v${{ steps.get_version.outputs.version }}.zip ./*
+          cd ..
+          echo "Archive contents:"
+          unzip -l metaflyer-v${{ steps.get_version.outputs.version }}.zip
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "${{ steps.get_version.outputs.version }}" \
+            --title "Metaflyer v${{ steps.get_version.outputs.version }}" \
+            --notes "## Metaflyer v${{ steps.get_version.outputs.version }}
+
+          ### Installation
+          1. Download \`metaflyer-v${{ steps.get_version.outputs.version }}.zip\` below
+          2. Extract the contents to your Obsidian vault's \`.obsidian/plugins/metaflyer/\` directory
+          3. Enable the plugin in Obsidian's Community Plugins settings
+
+          ### Plugin Features
+          - **Metadata Enforcement**: Automatic validation and population of note metadata
+          - **Auto-Organization**: Smart file naming and folder organization based on rulesets
+          - **Visual Feedback**: Color-coded alerts showing completion status
+          - **Configurable Rulesets**: Flexible rule configuration for different note types
+          - **Placeholder Markers**: Interactive markers with navigation and editing features
+          - **Collapsible Settings**: Improved settings interface with collapsible rulesets
+
+          ### Files Included
+          - \`main.js\` - Compiled plugin code
+          - \`manifest.json\` - Plugin manifest  
+          - \`styles.css\` - Plugin styles
+
+          ---
+          *This release was created automatically from tag ${{ steps.get_version.outputs.version }}*" \
+            --target main \
+            metaflyer-v${{ steps.get_version.outputs.version }}.zip \
+            build/main.js \
+            build/manifest.json \
+            build/styles.css
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
