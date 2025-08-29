@@ -1,7 +1,7 @@
 {
   "id": "metaflyer",
   "name": "Metaflyer",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minAppVersion": "0.15.0",
   "description": "Enforces properties rules and automatically organizes notes based on defined rulesets",
   "author": "ringmaster",
