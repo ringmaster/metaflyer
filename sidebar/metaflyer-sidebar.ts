@@ -1,240 +1,242 @@
-import { ItemView, WorkspaceLeaf, TFile } from 'obsidian';
-import MetaflyerPlugin from '../main';
-import { RulesetManager } from '../core/ruleset-manager';
-import { SearchCriteriaProcessor } from '../core/search-criteria-processor';
+import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
+import MetaflyerPlugin from "../main";
+import { RulesetManager } from "../core/ruleset-manager";
+import { SearchCriteriaProcessor } from "../core/search-criteria-processor";
 
-export const METAFLYER_SIDEBAR_TYPE = 'metaflyer-sidebar';
+export const METAFLYER_SIDEBAR_TYPE = "metaflyer-sidebar";
 
 export class MetaflyerSidebar extends ItemView {
-	plugin: MetaflyerPlugin;
-	rulesetManager: RulesetManager;
-	searchProcessor: SearchCriteriaProcessor;
-	currentFile: TFile | null = null;
-	searchResults: TFile[] = [];
+  plugin: MetaflyerPlugin;
+  rulesetManager: RulesetManager;
+  searchProcessor: SearchCriteriaProcessor;
+  currentFile: TFile | null = null;
+  searchResults: any[] = [];
 
-	constructor(leaf: WorkspaceLeaf, plugin: MetaflyerPlugin) {
-		super(leaf);
-		this.plugin = plugin;
-		this.rulesetManager = plugin.rulesetManager;
-		this.searchProcessor = new SearchCriteriaProcessor(this.app);
-	}
+  constructor(leaf: WorkspaceLeaf, plugin: MetaflyerPlugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.rulesetManager = plugin.rulesetManager;
+    this.searchProcessor = new SearchCriteriaProcessor(this.app);
+  }
 
-	getViewType(): string {
-		return METAFLYER_SIDEBAR_TYPE;
-	}
+  getViewType(): string {
+    return METAFLYER_SIDEBAR_TYPE;
+  }
 
-	getDisplayText(): string {
-		return 'Metaflyer';
-	}
+  getDisplayText(): string {
+    return "Metaflyer";
+  }
 
-	getIcon(): string {
-		return 'search';
-	}
+  getIcon(): string {
+    return "search";
+  }
 
-	async onOpen() {
-		const container = this.containerEl.children[1];
-		container.empty();
-		
-		container.createEl('h3', { text: 'Metaflyer Search' });
-		
-		this.render();
-		
-		// Listen for active file changes
-		this.registerEvent(
-			this.app.workspace.on('active-leaf-change', () => {
-				this.updateForActiveFile();
-			})
-		);
+  async onOpen() {
+    const container = this.containerEl.children[1];
+    container.empty();
 
-		// Initial load
-		this.updateForActiveFile();
-	}
+    container.createEl("h3", { text: "Metaflyer Search" });
 
-	async onClose() {
-		// Cleanup if needed
-	}
+    this.render();
 
-	private async updateForActiveFile() {
-		const activeFile = this.app.workspace.getActiveFile();
-		
-		if (activeFile?.extension === 'md') {
-			this.currentFile = activeFile;
-			await this.performSearch();
-		} else {
-			this.currentFile = null;
-			this.searchResults = [];
-			this.render();
-		}
-	}
+    // Listen for active file changes
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () => {
+        this.updateForActiveFile();
+      }),
+    );
 
-	private async performSearch() {
-		if (!this.currentFile) {
-			this.searchResults = [];
-			this.render();
-			return;
-		}
+    // Initial load
+    this.updateForActiveFile();
+  }
 
-		const cache = this.app.metadataCache.getFileCache(this.currentFile);
-		const frontmatter = cache?.frontmatter;
+  async onClose() {
+    // Cleanup if needed
+  }
 
-		if (!frontmatter) {
-			this.searchResults = [];
-			this.render();
-			return;
-		}
+  private async updateForActiveFile() {
+    const activeFile = this.app.workspace.getActiveFile();
 
-		const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+    if (activeFile?.extension === "md") {
+      this.currentFile = activeFile;
+      await this.performSearch();
+    } else {
+      this.currentFile = null;
+      this.searchResults = [];
+      this.render();
+    }
+  }
 
-		if (!evaluation.matches || !evaluation.ruleset?.search_criteria) {
-			this.searchResults = [];
-			this.render();
-			return;
-		}
+  private async performSearch() {
+    if (!this.currentFile) {
+      this.searchResults = [];
+      this.render();
+      return;
+    }
 
-		try {
-			this.searchResults = await this.searchProcessor.searchWithCriteria(
-				evaluation.ruleset.search_criteria,
-				frontmatter,
-				this.currentFile
-			);
-			this.render();
-		} catch (error) {
-			console.error('Error performing search:', error);
-			this.searchResults = [];
-			this.render();
-		}
-	}
+    const cache = this.app.metadataCache.getFileCache(this.currentFile);
+    const frontmatter = cache?.frontmatter;
 
-	private render() {
-		const container = this.containerEl.children[1];
-		const contentEl = container.querySelector('.metaflyer-content') || container.createDiv('metaflyer-content');
-		contentEl.empty();
+    if (!frontmatter) {
+      this.searchResults = [];
+      this.render();
+      return;
+    }
 
-		if (!this.currentFile) {
-			contentEl.createEl('p', { 
-				text: 'No active note selected',
-				attr: { style: 'color: var(--text-muted); font-style: italic;' }
-			});
-			return;
-		}
+    const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
 
-		const cache = this.app.metadataCache.getFileCache(this.currentFile);
-		const frontmatter = cache?.frontmatter;
-		const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+    if (!evaluation.matches) {
+      this.searchResults = [];
+      this.render();
+      return;
+    }
 
-		if (!evaluation.matches) {
-			contentEl.createEl('p', { 
-				text: 'Current note matches no rulesets',
-				attr: { style: 'color: var(--text-muted); font-style: italic;' }
-			});
-			return;
-		}
+    if (!evaluation.ruleset?.search_criteria) {
+      this.searchResults = [];
+      this.render();
+      return;
+    }
 
-		if (!evaluation.ruleset?.search_criteria) {
-			contentEl.createEl('p', { 
-				text: `Ruleset "${evaluation.ruleset?.name}" has no search criteria`,
-				attr: { style: 'color: var(--text-muted); font-style: italic;' }
-			});
-			return;
-		}
+    try {
+      this.searchResults = await this.searchProcessor.searchWithCriteria(
+        evaluation.ruleset.search_criteria,
+        frontmatter,
+        this.currentFile,
+      );
+      this.render();
+    } catch (error) {
+      console.error("Error performing search:", error);
+      this.searchResults = [];
+      this.render();
+    }
+  }
 
-		// Show current ruleset info
-		const rulesetInfo = contentEl.createDiv('ruleset-info');
-		rulesetInfo.style.marginBottom = '15px';
-		rulesetInfo.style.padding = '10px';
-		rulesetInfo.style.border = '1px solid var(--background-modifier-border)';
-		rulesetInfo.style.borderRadius = '5px';
-		rulesetInfo.style.backgroundColor = 'var(--background-secondary)';
+  private render() {
+    const container = this.containerEl.children[1];
+    const contentEl =
+      container.querySelector(".metaflyer-content") ||
+      container.createDiv("metaflyer-content");
+    contentEl.empty();
 
-		rulesetInfo.createEl('h4', { 
-			text: `Ruleset: ${evaluation.ruleset.name}`,
-			attr: { style: 'margin: 0 0 5px 0;' }
-		});
+    if (!this.currentFile) {
+      contentEl.createEl("p", {
+        text: "No active note selected",
+        attr: { style: "color: var(--text-muted); font-style: italic;" },
+      });
+      return;
+    }
 
-		const processedCriteria = this.searchProcessor.processCriteriaPlaceholders(
-			evaluation.ruleset.search_criteria,
-			frontmatter || {},
-			this.currentFile
-		);
+    const cache = this.app.metadataCache.getFileCache(this.currentFile);
+    const frontmatter = cache?.frontmatter;
+    const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
 
-		rulesetInfo.createEl('p', { 
-			text: `Search: ${processedCriteria}`,
-			attr: { style: 'margin: 0; font-family: var(--font-monospace); font-size: 0.9em;' }
-		});
+    if (!evaluation.matches) {
+      contentEl.createEl("p", {
+        text: "Current note matches no rulesets",
+        attr: { style: "color: var(--text-muted); font-style: italic;" },
+      });
+      return;
+    }
 
-		// Show search results
-		const resultsHeader = contentEl.createEl('h4', { 
-			text: `Search Results (${this.searchResults.length})`,
-			attr: { style: 'margin: 15px 0 10px 0;' }
-		});
+    if (!evaluation.ruleset?.search_criteria) {
+      contentEl.createEl("p", {
+        text: `Ruleset "${evaluation.ruleset?.name}" has no search criteria`,
+        attr: { style: "color: var(--text-muted); font-style: italic;" },
+      });
+      return;
+    }
 
-		if (this.searchResults.length === 0) {
-			contentEl.createEl('p', { 
-				text: 'No matching notes found',
-				attr: { style: 'color: var(--text-muted); font-style: italic;' }
-			});
-			return;
-		}
+    // Show current ruleset info
+    const rulesetInfo = contentEl.createDiv("ruleset-info");
+    rulesetInfo.style.marginBottom = "15px";
+    rulesetInfo.style.padding = "10px";
+    rulesetInfo.style.border = "1px solid var(--background-modifier-border)";
+    rulesetInfo.style.borderRadius = "5px";
+    rulesetInfo.style.backgroundColor = "var(--background-secondary)";
 
-		const resultsList = contentEl.createEl('ul');
-		resultsList.style.listStyle = 'none';
-		resultsList.style.padding = '0';
+    rulesetInfo.createEl("h4", {
+      text: `Ruleset: ${evaluation.ruleset.name}`,
+      attr: { style: "margin: 0 0 5px 0;" },
+    });
 
-		for (const file of this.searchResults) {
-			const listItem = resultsList.createEl('li');
-			listItem.style.marginBottom = '8px';
-			listItem.style.padding = '8px';
-			listItem.style.border = '1px solid var(--background-modifier-border)';
-			listItem.style.borderRadius = '3px';
-			listItem.style.cursor = 'pointer';
-			listItem.style.transition = 'background-color 0.2s';
+    const processedCriteria = this.searchProcessor.processCriteriaPlaceholders(
+      evaluation.ruleset.search_criteria,
+      frontmatter || {},
+      this.currentFile,
+    );
 
-			listItem.addEventListener('mouseenter', () => {
-				listItem.style.backgroundColor = 'var(--background-modifier-hover)';
-			});
+    rulesetInfo.createEl("p", {
+      text: `Search: ${processedCriteria}`,
+      attr: {
+        style:
+          "margin: 0; font-family: var(--font-monospace); font-size: 0.9em;",
+      },
+    });
 
-			listItem.addEventListener('mouseleave', () => {
-				listItem.style.backgroundColor = '';
-			});
+    // Show search results
+    const resultsHeader = contentEl.createEl("h4", {
+      text: `Search Results (${this.searchResults.length})`,
+      attr: { style: "margin: 15px 0 10px 0;" },
+    });
 
-			listItem.addEventListener('click', () => {
-				this.app.workspace.openLinkText(file.path, '', false);
-			});
+    if (this.searchResults.length === 0) {
+      contentEl.createEl("p", {
+        text: "No matching notes found",
+        attr: { style: "color: var(--text-muted); font-style: italic;" },
+      });
+      return;
+    }
 
-			const fileName = listItem.createEl('div');
-			fileName.style.fontWeight = 'bold';
-			fileName.style.marginBottom = '4px';
-			fileName.textContent = file.basename;
+    const resultsList = contentEl.createEl("ul");
+    resultsList.style.listStyle = "none";
+    resultsList.style.padding = "0";
 
-			const filePath = listItem.createEl('div');
-			filePath.style.fontSize = '0.85em';
-			filePath.style.color = 'var(--text-muted)';
-			filePath.textContent = file.path;
+    for (const result of this.searchResults) {
+      const listItem = resultsList.createEl("li");
+      listItem.style.marginBottom = "8px";
+      listItem.style.padding = "8px";
+      listItem.style.border = "1px solid var(--background-modifier-border)";
+      listItem.style.borderRadius = "3px";
+      listItem.style.cursor = "pointer";
+      listItem.style.transition = "background-color 0.2s";
 
-			// Show relevant metadata if available
-			const fileCache = this.app.metadataCache.getFileCache(file);
-			const fileFrontmatter = fileCache?.frontmatter;
-			
-			if (fileFrontmatter && frontmatter) {
-				const metadataDiv = listItem.createEl('div');
-				metadataDiv.style.fontSize = '0.8em';
-				metadataDiv.style.marginTop = '4px';
-				metadataDiv.style.color = 'var(--text-muted)';
+      listItem.addEventListener("mouseenter", () => {
+        listItem.style.backgroundColor = "var(--background-modifier-hover)";
+      });
 
-				const relevantFields: string[] = [];
-				for (const key in frontmatter) {
-					if (fileFrontmatter[key] !== undefined) {
-						const value = Array.isArray(fileFrontmatter[key]) 
-							? fileFrontmatter[key].join(', ')
-							: String(fileFrontmatter[key]);
-						relevantFields.push(`${key}: ${value}`);
-					}
-				}
+      listItem.addEventListener("mouseleave", () => {
+        listItem.style.backgroundColor = "";
+      });
 
-				if (relevantFields.length > 0) {
-					metadataDiv.textContent = relevantFields.slice(0, 3).join(' | ');
-				}
-			}
-		}
-	}
+      listItem.addEventListener("click", () => {
+        this.app.workspace.openLinkText(result.path, "", false);
+      });
+
+      const fileName = listItem.createEl("div");
+      fileName.style.fontWeight = "bold";
+      fileName.style.marginBottom = "4px";
+      fileName.textContent = result.basename;
+
+      const filePath = listItem.createEl("div");
+      filePath.style.fontSize = "0.85em";
+      filePath.style.color = "var(--text-muted)";
+      filePath.textContent = result.path;
+
+      // Show search score and excerpt
+      const scoreDiv = listItem.createEl("div");
+      scoreDiv.style.fontSize = "0.8em";
+      scoreDiv.style.marginTop = "4px";
+      scoreDiv.style.color = "var(--text-muted)";
+      scoreDiv.textContent = `Score: ${result.score.toFixed(1)}`;
+
+      if (result.excerpt) {
+        const excerptDiv = listItem.createEl("div");
+        excerptDiv.style.fontSize = "0.8em";
+        excerptDiv.style.marginTop = "4px";
+        excerptDiv.style.color = "var(--text-muted)";
+        excerptDiv.style.fontStyle = "italic";
+        excerptDiv.innerHTML = result.excerpt.substring(0, 100) + "...";
+      }
+    }
+  }
 }

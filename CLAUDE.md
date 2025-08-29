@@ -5,7 +5,9 @@
 - **Distribution-ready**: Follow Obsidian plugin guidelines, include proper manifest and release structure
 - **GUI configuration panel**: Settings tab for defining rulesets
 
-## Technical Specifications
+# Technical Specifications
+
+## Stage 1: Metadata Enforcement
 
 ### Ruleset Configuration Structure
 ```yaml
@@ -59,8 +61,6 @@ ruleset: O3
 - `{project}` and other frontmatter field references
 - `{counter}` for sequential numbering if needed
 
-## Implementation Considerations
-
 ### Triggering Logic
 - Monitor frontmatter changes in real-time via Obsidian's metadata cache
 - Re-evaluate rules when files are moved between directories
@@ -98,6 +98,83 @@ metadata-enforcer/
 ├── settings/       # Unified configuration UI
 └── behaviors/      # Future workflow features (pull-forward, etc.)
 ```
+
+## Stage 2: Placeholder Markers
+
+### Objective
+Create an Obsidian plugin that implements visual markers using `<<>>` delimiters. The markers should behave like native Obsidian markdown (bold, italic, etc.) with custom styling and navigation commands.
+
+### Marker Specification Syntax
+- **Pattern**: `<<content>>`
+- **Regex**: `<<\w+>>`
+- **Content rules**:
+  - Must contain at least one word character (letters, digits, underscore)
+  - Case-insensitive
+  - No whitespace allowed
+  - No newlines (single-line only)
+  - Underscores permitted (e.g., `<<first_name>>`)
+
+### Nesting Behavior
+- Only innermost markers are valid
+- Example: `<<outer_<<inner>>_marker>>` - only `<<inner>>` is treated as a marker
+
+### Invalid Cases
+- Malformed markers like `<<incomplete` or `<<>>` (empty) are ignored
+- Markers inside code blocks/fences are not processed
+
+### Visual Display States
+When cursor/selection is NOT within the marker:
+```
+Text: <<marker_name>> → displays as: Text: marker_name
+```
+- Inner text styled with highlighted background and rounded corners
+- Delimiters hidden
+
+When cursor/selection includes ANY part of the marker:
+```
+Text: <<marker_name>> → displays as: Text: <<marker_name>>
+```
+- Full markup visible including delimiters
+- Standard text styling
+- This is the standard behavior of Obsidian while editing markdown, and should not need to be implemented manually
+
+### Styling Requirements
+- Markers should override other text formatting where text remains visible
+- Example: `**bold <<marker>> text**` - marker appears as marker, not bold
+- Markers should NOT appear inside code blocks or inline code
+- Consistent text size regardless of surrounding formatting
+- Exception: Markers in contexts where they would be hidden (like URLs) should remain hidden
+
+### Navigation Command Implementation
+- Create two command palette actions:
+  - "Go to next marker"
+  - "Go to previous marker"
+- Do NOT use Tab key - let users assign preferred hotkeys
+
+### Navigation Behavior
+- **Order**: Absolute position within file (top to bottom)
+- **Scope**: Current file in active pane only
+- **Wrapping**: After last marker, wrap to first marker; before first marker, wrap to last
+- **Selection**: When navigating to a marker, select the entire marker including delimiters (`<<marker_name>>`)
+- **Multi-selection**: If selection spans multiple markers, navigate from the last/first marker in selection for next/previous respectively
+
+### Compatibility
+- **Mode**: Edit mode in live preview
+- **Scope**: Current pane only (no cross-pane navigation)
+- **Integration**: Should behave like native Obsidian markdown delimiters
+
+### Implementation Approach
+- Prefer native Obsidian APIs for markdown extension if available
+- Fall back to CodeMirror-level implementation if necessary
+- The goal is to make `<<>>` behave exactly like other markdown delimiters (bold, italic, etc.) in terms of cursor interaction and display switching
+
+### Expected User Experience
+Users should be able to:
+1. Type `<<marker_name>>` and see it render as styled text
+2. Click on or navigate cursor into the marker to edit it as plain text
+3. Use assigned hotkeys to jump between markers in document order
+4. Have markers integrate seamlessly with existing Obsidian editing workflows
+
 
 ## Key Behavioral Requirements
 - **No friction for routine meetings**: User creates note, sets meeting-type, plugin handles everything else
