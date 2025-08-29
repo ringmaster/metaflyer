@@ -1,4 +1,6 @@
 import { Notice, MarkdownView } from "obsidian";
+const TurndownService = require("turndown");
+const { gfm } = require("turndown-plugin-gfm");
 
 export class ClipboardUtils {
   /**
@@ -84,133 +86,59 @@ export class ClipboardUtils {
   }
 
   /**
-   * Simple HTML to Markdown converter
-   * Handles common formatting elements
+   * Robust HTML to Markdown converter using Turndown.js with GFM support
+   * Handles tables, strikethrough, task lists, and other GitHub Flavored Markdown features
    */
   private static htmlToMarkdown(html: string): string {
-    // Clean up the HTML first
-    let markdown = html;
-
     // If the input doesn't look like HTML, return it as-is
     if (!html.includes("<") || (!html.includes("</") && !html.includes("/>"))) {
       return html.trim();
     }
 
-    // Remove DOCTYPE, html, head, body tags and their content except body content
-    markdown = markdown.replace(/<!DOCTYPE[^>]*>/gi, "");
-    markdown = markdown.replace(/<html[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/html>/gi, "");
-
-    // Handle head tag with content - using multiline regex
-    const headRegex = /<head[^>]*>[\s\S]*?<\/head>/gi;
-    markdown = markdown.replace(headRegex, "");
-
-    markdown = markdown.replace(/<body[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/body>/gi, "");
-
-    // Handle line breaks first
-    markdown = markdown.replace(/<br\s*\/?>/gi, "\n");
-    markdown = markdown.replace(/<\/p>/gi, "\n\n");
-    markdown = markdown.replace(/<p[^>]*>/gi, "");
-
-    // Handle headers
-    markdown = markdown.replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n");
-    markdown = markdown.replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n");
-    markdown = markdown.replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n");
-    markdown = markdown.replace(/<h4[^>]*>(.*?)<\/h4>/gi, "#### $1\n");
-    markdown = markdown.replace(/<h5[^>]*>(.*?)<\/h5>/gi, "##### $1\n");
-    markdown = markdown.replace(/<h6[^>]*>(.*?)<\/h6>/gi, "###### $1\n");
-
-    // Handle text formatting
-    markdown = markdown.replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**");
-    markdown = markdown.replace(/<b[^>]*>(.*?)<\/b>/gi, "**$1**");
-    markdown = markdown.replace(/<em[^>]*>(.*?)<\/em>/gi, "*$1*");
-    markdown = markdown.replace(/<i[^>]*>(.*?)<\/i>/gi, "*$1*");
-    markdown = markdown.replace(/<u[^>]*>(.*?)<\/u>/gi, "<u>$1</u>"); // Keep underline as HTML
-    markdown = markdown.replace(/<strike[^>]*>(.*?)<\/strike>/gi, "~~$1~~");
-    markdown = markdown.replace(/<del[^>]*>(.*?)<\/del>/gi, "~~$1~~");
-    markdown = markdown.replace(/<s[^>]*>(.*?)<\/s>/gi, "~~$1~~");
-    markdown = markdown.replace(/<code[^>]*>(.*?)<\/code>/gi, "`$1`");
-
-    // Handle links
-    markdown = markdown.replace(
-      /<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gi,
-      "[$2]($1)",
-    );
-
-    // Handle images
-    markdown = markdown.replace(
-      /<img[^>]*src=["']([^"']*)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi,
-      "![$2]($1)",
-    );
-    markdown = markdown.replace(
-      /<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']*)["'][^>]*>/gi,
-      "![$1]($2)",
-    );
-    markdown = markdown.replace(
-      /<img[^>]*src=["']([^"']*)["'][^>]*>/gi,
-      "![]($1)",
-    );
-
-    // Handle lists
-    markdown = markdown.replace(/<ul[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/ul>/gi, "\n");
-    markdown = markdown.replace(/<ol[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/ol>/gi, "\n");
-    markdown = markdown.replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n");
-
-    // Handle blockquotes with multiline content
-    const blockquoteRegex = /<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi;
-    markdown = markdown.replace(blockquoteRegex, function (match, content) {
-      const lines = content.split("\n");
-      const quotedLines = [];
-      for (let i = 0; i < lines.length; i++) {
-        quotedLines.push("> " + lines[i].trim());
-      }
-      return quotedLines.join("\n") + "\n";
+    // Create Turndown service with Obsidian-friendly options
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',
+      hr: '---',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced',
+      fence: '```',
+      emDelimiter: '*',
+      strongDelimiter: '**',
+      linkStyle: 'inlined'  // Changed from 'referenced' to 'inlined' for better Obsidian compatibility
     });
 
-    // Handle pre/code blocks with multiline content
-    const preCodeRegex = /<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi;
-    markdown = markdown.replace(preCodeRegex, "```\n$1\n```\n");
+    // Use the GFM plugin for tables, strikethrough, and task lists
+    turndownService.use(gfm);
 
-    const preRegex = /<pre[^>]*>([\s\S]*?)<\/pre>/gi;
-    markdown = markdown.replace(preRegex, "```\n$1\n```\n");
+    // Add custom rule for underline (not part of GFM, but useful for Obsidian)
+    turndownService.addRule('underline', {
+      filter: ['u'],
+      replacement: function (content: string) {
+        return '<u>' + content + '</u>';
+      }
+    });
 
-    // Handle div and span (just remove tags, keep content)
-    markdown = markdown.replace(/<div[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/div>/gi, "\n");
-    markdown = markdown.replace(/<span[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/span>/gi, "");
+    // Improve code blocks with language detection
+    turndownService.addRule('codeBlocks', {
+      filter: function (node: any) {
+        return node.nodeName === 'PRE' && node.firstChild && node.firstChild.nodeName === 'CODE';
+      },
+      replacement: function (content: string, node: any) {
+        const codeNode = node.firstChild;
+        const className = codeNode.getAttribute('class') || '';
+        const language = className.match(/(?:language-|lang-)(\S+)/) || className.match(/highlight-(\S+)/);
+        const lang = language ? language[1] : '';
+        
+        return '\n\n```' + lang + '\n' + codeNode.textContent + '\n```\n\n';
+      }
+    });
 
-    // Handle tables (basic support)
-    markdown = markdown.replace(/<table[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/table>/gi, "\n");
-    markdown = markdown.replace(/<thead[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/thead>/gi, "");
-    markdown = markdown.replace(/<tbody[^>]*>/gi, "");
-    markdown = markdown.replace(/<\/tbody>/gi, "");
-    markdown = markdown.replace(/<tr[^>]*>/gi, "|");
-    markdown = markdown.replace(/<\/tr>/gi, "|\n");
-    markdown = markdown.replace(/<th[^>]*>(.*?)<\/th>/gi, " $1 |");
-    markdown = markdown.replace(/<td[^>]*>(.*?)<\/td>/gi, " $1 |");
+    // Convert HTML to markdown
+    let markdown = turndownService.turndown(html);
 
-    // Clean up any remaining HTML tags
-    markdown = markdown.replace(/<[^>]*>/g, "");
-
-    // Decode HTML entities
-    markdown = markdown.replace(/&nbsp;/g, " ");
-    markdown = markdown.replace(/&amp;/g, "&");
-    markdown = markdown.replace(/&lt;/g, "<");
-    markdown = markdown.replace(/&gt;/g, ">");
-    markdown = markdown.replace(/&quot;/g, '"');
-    markdown = markdown.replace(/&#39;/g, "'");
-    markdown = markdown.replace(/&apos;/g, "'");
-
-    // Clean up whitespace
-    markdown = markdown.replace(/\n\s*\n\s*\n/g, "\n\n"); // Remove excessive line breaks
-    markdown = markdown.replace(/^\s+/gm, ""); // Remove leading whitespace on lines
-    markdown = markdown.replace(/\s+$/gm, ""); // Remove trailing whitespace on lines
+    // Clean up excessive whitespace while preserving intentional spacing
+    markdown = markdown.replace(/\n{3,}/g, '\n\n'); // Max 2 consecutive line breaks
+    markdown = markdown.replace(/^\s+$/gm, ''); // Remove whitespace-only lines
     markdown = markdown.trim();
 
     return markdown;
@@ -230,7 +158,8 @@ export class ClipboardUtils {
   }
 
   /**
-   * Inserts text at the current cursor position in the active editor
+   * Replaces selected text or inserts at cursor position in the active editor
+   * If text is selected, it will be replaced. Otherwise, text is inserted at cursor.
    */
   static insertTextAtCursor(app: any, text: string): boolean {
     const activeView = app.workspace.getActiveViewOfType(MarkdownView);
@@ -239,47 +168,98 @@ export class ClipboardUtils {
       return false;
     }
 
-    const cursor = activeView.editor.getCursor();
-    activeView.editor.replaceRange(text, cursor);
+    // Check if there's a selection
+    if (activeView.editor.somethingSelected()) {
+      // Replace the selected text
+      activeView.editor.replaceSelection(text);
+    } else {
+      // Insert at cursor position
+      const cursor = activeView.editor.getCursor();
+      activeView.editor.replaceRange(text, cursor);
 
-    // Move cursor to end of inserted text
-    const lines = text.split("\n");
-    const newCursor = {
-      line: cursor.line + lines.length - 1,
-      ch:
-        lines.length === 1
-          ? cursor.ch + text.length
-          : lines[lines.length - 1].length,
-    };
-    activeView.editor.setCursor(newCursor);
+      // Move cursor to end of inserted text
+      const lines = text.split("\n");
+      const newCursor = {
+        line: cursor.line + lines.length - 1,
+        ch:
+          lines.length === 1
+            ? cursor.ch + text.length
+            : lines[lines.length - 1].length,
+      };
+      activeView.editor.setCursor(newCursor);
+    }
 
     return true;
   }
 
   /**
-   * Test method for HTML to markdown conversion
+   * Test method for HTML to markdown conversion with GFM features
    * Can be called from console for testing: app.plugins.plugins.metaflyer.testHtmlToMarkdown()
    */
   static testHtmlToMarkdown(): void {
     const testHtml = `
-      <h1>Test Document</h1>
+      <h1>GFM Test Document</h1>
       <p>This is a <strong>bold</strong> and <em>italic</em> text with a <a href="https://example.com">link</a>.</p>
-      <h2>Features</h2>
+      
+      <h2>GitHub Flavored Markdown Features</h2>
+      
+      <h3>Strikethrough</h3>
+      <p>Text with <del>strikethrough</del> and <s>another strikethrough</s>.</p>
+      
+      <h3>Tables</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Supported</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Tables</td>
+            <td>✅ Yes</td>
+            <td>Full GFM table support</td>
+          </tr>
+          <tr>
+            <td>Strikethrough</td>
+            <td>✅ Yes</td>
+            <td>~~text~~</td>
+          </tr>
+          <tr>
+            <td>Task Lists</td>
+            <td>✅ Yes</td>
+            <td>[ ] and [x]</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <h3>Task Lists</h3>
       <ul>
-        <li>Item 1</li>
-        <li>Item 2 with <code>inline code</code></li>
+        <li><input type="checkbox" disabled> Unchecked task</li>
+        <li><input type="checkbox" disabled checked> Checked task</li>
+        <li>Regular list item</li>
       </ul>
-      <blockquote>This is a quote</blockquote>
-      <pre><code>function test() {
-  console.log("Hello World");
+      
+      <h3>Code Blocks</h3>
+      <pre><code class="language-javascript">function example() {
+  console.log("Code blocks with syntax highlighting");
+  return true;
 }</code></pre>
+      
+      <h3>Mixed Formatting</h3>
+      <p>Text with <u>underline</u>, <strong>bold</strong>, <em>italic</em>, and <del>strikethrough</del>.</p>
+      
+      <blockquote>
+        <p>This is a blockquote with <strong>bold text</strong> and a <a href="https://example.com">link</a>.</p>
+      </blockquote>
     `;
 
     const result = this.htmlToMarkdown(testHtml);
-    console.log("HTML to Markdown conversion test:");
+    console.log("HTML to Markdown conversion test (GFM features enabled):");
     console.log("Input HTML:", testHtml);
     console.log("Output Markdown:", result);
 
-    new Notice("HTML to Markdown test completed. Check console for results.");
+    new Notice("GFM HTML to Markdown test completed. Check console for enhanced table, strikethrough, and task list support!");
   }
 }

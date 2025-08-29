@@ -370,13 +370,7 @@ export default class MetaflyerPlugin extends Plugin {
         result.content,
       );
 
-      if (success) {
-        if (result.wasConverted) {
-          new Notice("✅ Rich text converted to markdown");
-        } else {
-          new Notice("📋 Plain text pasted");
-        }
-      } else {
+      if (!success) {
         new Notice("❌ No active markdown editor found");
       }
     } catch (error) {

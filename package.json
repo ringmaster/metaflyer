@@ -14,6 +14,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^16.11.6",
+    "@types/turndown": "^5.0.5",
     "@typescript-eslint/eslint-plugin": "5.29.0",
     "@typescript-eslint/parser": "5.29.0",
     "builtin-modules": "3.3.0",
@@ -26,6 +27,8 @@
   "dependencies": {
     "@codemirror/language": "^6.11.3",
     "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.38.1"
+    "@codemirror/view": "^6.38.1",
+    "turndown": "^7.2.1",
+    "turndown-plugin-gfm": "^1.0.2"
   }
 }
