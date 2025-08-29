@@ -16,6 +16,7 @@ import {
 } from "./sidebar/metaflyer-sidebar";
 import { ClipboardUtils } from "./core/clipboard-utils";
 import { placeholderMarkerExtension, navigateToMarker } from "./core/placeholder-markers";
+import { TemplateEngine } from "./core/template-engine";
 
 export default class MetaflyerPlugin extends Plugin {
   settings: MetaflyerSettings;

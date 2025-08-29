@@ -16,6 +16,8 @@ export interface Ruleset {
   autoTitleMode?: AutoTitleMode;
   enableAutoMove?: boolean;
   search_criteria?: string;
+  search_result_count?: number;
+  ollama_query?: string;
   behaviors?: {
     pull_forward?: boolean;
     create_tasks?: boolean;
@@ -52,6 +54,16 @@ export const DEFAULT_SETTINGS: MetaflyerSettings = {
       autoTitleMode: "always",
       enableAutoMove: true,
       search_criteria: 'type:"{type}" attendees:"{attendees}"',
+      search_result_count: 5,
+      ollama_query: `Based on the following meeting notes, suggest 5 action items:
+
+Current meeting: {current_file.title}
+Date: {current_file.metadata.date}
+
+{#each results as result}
+## {result.title}
+{result.content}
+{/each}`,
       behaviors: {
         pull_forward: true,
         create_tasks: true,

@@ -203,6 +203,34 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
 					});
 			});
 
+		new Setting(contentContainer)
+			.setName('Search Result Count')
+			.setDesc('Number of search results to show in sidebar (0 = disabled)')
+			.addText(text => {
+				text.setValue((ruleset.search_result_count || 0).toString())
+					.onChange(async (value) => {
+						const num = parseInt(value);
+						ruleset.search_result_count = isNaN(num) ? 0 : Math.max(0, num);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = 'number';
+				text.inputEl.min = '0';
+			});
+
+		new Setting(contentContainer)
+			.setName('Ollama Query Template')
+			.setDesc('Template for AI suggestions (supports {current_file.*} and {#each results} syntax)')
+			.addTextArea(text => {
+				text.setValue(ruleset.ollama_query || '')
+					.onChange(async (value) => {
+						ruleset.ollama_query = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 8;
+				text.inputEl.style.width = '100%';
+				text.inputEl.style.fontFamily = 'var(--font-monospace)';
+			});
+
 		const metadataContainer = contentContainer.createDiv();
 		metadataContainer.createEl('h5', { text: 'Required Properties Fields' });
 
