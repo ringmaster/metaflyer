@@ -17,12 +17,14 @@ import {
 import { ClipboardUtils } from "./core/clipboard-utils";
 import { placeholderMarkerExtension, navigateToMarker } from "./core/placeholder-markers";
 import { TemplateEngine } from "./core/template-engine";
+import { FooMenu } from "./foo-menu/foo-menu";
 
 export default class MetaflyerPlugin extends Plugin {
   settings: MetaflyerSettings;
   rulesetManager: RulesetManager;
   metadataEnforcer: MetadataEnforcer;
   autoOrganizer: AutoOrganizer;
+  fooMenu: FooMenu;
 
   async onload() {
     await this.loadSettings();
@@ -34,6 +36,7 @@ export default class MetaflyerPlugin extends Plugin {
       this.settings.enableWarnings,
     );
     this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
+    this.fooMenu = new FooMenu(this.app, this, this.rulesetManager);
 
     this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
 
@@ -163,6 +166,14 @@ export default class MetaflyerPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "show-foo-menu",
+      name: "Show Foo Menu",
+      callback: () => {
+        this.fooMenu.showMenu();
+      },
+    });
+
     this.registerEvent(
       this.app.metadataCache.on("changed", (file: TFile) => {
         this.metadataEnforcer.evaluateFile(file);
@@ -198,6 +209,7 @@ export default class MetaflyerPlugin extends Plugin {
       }),
     );
 
+
     this.app.workspace.onLayoutReady(() => {
       this.metadataEnforcer.evaluateAllFiles();
       // Auto-open the sidebar on first load
@@ -207,6 +219,7 @@ export default class MetaflyerPlugin extends Plugin {
 
   onunload() {
     this.metadataEnforcer?.cleanup();
+    this.fooMenu?.destroy();
   }
 
   async loadSettings() {

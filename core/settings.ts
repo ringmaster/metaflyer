@@ -15,6 +15,7 @@ export interface Ruleset {
   path?: string;
   autoTitleMode?: AutoTitleMode;
   enableAutoMove?: boolean;
+  enableFooMenu?: boolean;
   search_criteria?: string;
   search_result_count?: number;
   ollama_query?: string;
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: MetaflyerSettings = {
       path: "Areas/Work/O3s/{attendees}",
       autoTitleMode: "always",
       enableAutoMove: true,
+      enableFooMenu: true,
       search_criteria: 'type:"{type}" attendees:"{attendees}"',
       search_result_count: 5,
       ollama_query: `Based on the following meeting notes, suggest 5 action items:

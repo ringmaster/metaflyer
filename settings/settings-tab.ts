@@ -187,6 +187,7 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
               path: '',
               autoTitleMode: 'always',
               enableAutoMove: true,
+              enableFooMenu: false,
               search_criteria: '',
               behaviors: {}
             };
@@ -321,6 +322,17 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
         toggle.setValue(ruleset.enableAutoMove !== false)
           .onChange(async (value) => {
             ruleset.enableAutoMove = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(contentContainer)
+      .setName('Enable Foo Menu')
+      .setDesc('Show quick checkbox icons (⚡) in the gutter for bullet point formatting')
+      .addToggle(toggle => {
+        toggle.setValue(ruleset.enableFooMenu !== false)
+          .onChange(async (value) => {
+            ruleset.enableFooMenu = value;
             await this.plugin.saveSettings();
           });
       });
