@@ -147,6 +147,33 @@ Please respond with a bulleted or numbered list of suggestions.`;
       return false;
     }
   }
+
+  /**
+   * Get list of available models from Ollama
+   */
+  static async getModels(): Promise<OllamaModel[]> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${this.BASE_URL}/api/tags`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.models || [];
+    } catch (error) {
+      console.error('Error fetching Ollama models:', error);
+      return [];
+    }
+  }
 }
 
 export interface OllamaResponse {
@@ -154,4 +181,20 @@ export interface OllamaResponse {
   response?: string;
   suggestions: string[];
   error?: string;
+}
+
+export interface OllamaModel {
+  name: string;
+  model: string;
+  size: number;
+  digest: string;
+  details: {
+    format: string;
+    family: string;
+    families: string[];
+    parameter_size: string;
+    quantization_level: string;
+  };
+  expires_at: string;
+  size_vram: number;
 }

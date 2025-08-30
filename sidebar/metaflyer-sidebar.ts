@@ -251,8 +251,8 @@ export class MetaflyerSidebar extends ItemView {
       // Process the template
       const processedQuery = TemplateEngine.processTemplate(ruleset.ollama_query, context);
 
-      // Make Ollama request
-      const response = await OllamaClient.generateSuggestions(processedQuery);
+      // Make Ollama request using the configured model
+      const response = await OllamaClient.generateSuggestions(processedQuery, this.plugin.settings.ollamaModel);
 
       if (response.success) {
         this.aiSuggestions = response.suggestions;

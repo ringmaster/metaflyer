@@ -27,6 +27,7 @@ export interface Ruleset {
 export interface MetaflyerSettings {
   rulesets: Ruleset[];
   enableWarnings: boolean;
+  ollamaModel: string;
 }
 
 export const DEFAULT_SETTINGS: MetaflyerSettings = {
@@ -71,4 +72,5 @@ Date: {current_file.metadata.date}
     },
   ],
   enableWarnings: true,
+  ollamaModel: "llama2",
 };
