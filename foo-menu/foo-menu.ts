@@ -31,7 +31,7 @@ export class FooMenu {
     this.app = app;
     this.plugin = plugin;
     this.rulesetManager = rulesetManager;
-    
+
     // Bind the keydown handler
     this.keydownHandler = this.handleKeydown.bind(this);
   }
@@ -58,7 +58,7 @@ export class FooMenu {
     const cache = this.app.metadataCache.getFileCache(currentFile);
     const frontmatter = cache?.frontmatter;
     console.log('FooMenu: showMenu frontmatter:', frontmatter);
-    
+
     const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
     console.log('FooMenu: showMenu evaluation:', evaluation);
 
@@ -81,8 +81,8 @@ export class FooMenu {
     this.createMenu();
     this.isMenuOpen = true;
 
-    // Add global keydown listener
-    document.addEventListener('keydown', this.keydownHandler);
+    // Add global keydown listener with high priority (capture phase)
+    document.addEventListener('keydown', this.keydownHandler, true);
   }
 
   /**
@@ -93,13 +93,13 @@ export class FooMenu {
       this.menuEl.remove();
       this.menuEl = null;
     }
-    
+
     this.isMenuOpen = false;
     this.currentEditor = null;
     this.currentLine = -1;
 
-    // Remove global keydown listener
-    document.removeEventListener('keydown', this.keydownHandler);
+    // Remove global keydown listener (capture phase)
+    document.removeEventListener('keydown', this.keydownHandler, true);
   }
 
   /**
@@ -115,14 +115,14 @@ export class FooMenu {
     // Get cursor position for menu placement
     const cursor = this.currentEditor.getCursor();
     console.log('FooMenu: Cursor position:', cursor);
-    
+
     // Try multiple methods to get cursor coordinates
     let coords = null;
-    
+
     // @ts-ignore - access CodeMirror instance
     const cm = this.currentEditor.cm;
     console.log('FooMenu: CodeMirror instance:', cm);
-    
+
     // Method 1: Try CodeMirror 6 coordsAtPos
     if (cm?.coordsAtPos) {
       try {
@@ -139,7 +139,7 @@ export class FooMenu {
         console.log('FooMenu: CM6 coordsAtPos failed:', e);
       }
     }
-    
+
     // Method 2: Try getting coordinates from cursor element
     if (!coords) {
       try {
@@ -151,7 +151,7 @@ export class FooMenu {
         console.log('FooMenu: coordsChar failed:', e);
       }
     }
-    
+
     // Method 3: Calculate position manually using editor and line height
     if (!coords) {
       console.log('FooMenu: Using manual coordinate calculation');
@@ -160,7 +160,7 @@ export class FooMenu {
         const rect = editorEl.getBoundingClientRect();
         const lineHeight = 24; // Approximate line height
         const charWidth = 8; // Approximate character width
-        
+
         coords = {
           top: rect.top + (cursor.line * lineHeight),
           left: rect.left + (cursor.ch * charWidth),
@@ -170,7 +170,7 @@ export class FooMenu {
         console.log('FooMenu: Manual coordinates:', coords);
       }
     }
-    
+
     if (!coords) {
       console.log('FooMenu: All coordinate methods failed, using fallback position');
       // Fallback: position near the top-left of the editor
@@ -198,9 +198,11 @@ export class FooMenu {
   private createMenuAt(coords: { top: number; left: number }): void {
     console.log('FooMenu: Creating menu at coordinates:', coords);
 
-    // Create menu container
+    // Create menu container with proper S-Checkboxes context
     this.menuEl = document.createElement('div');
-    this.menuEl.className = 'foo-menu-container';
+    this.menuEl.className = 'foo-menu-container markdown-source-view mod-cm6';
+    // Ensure we're not in the excluded alt-chkbx-off mode
+    document.body.classList.remove('alt-chkbx-off');
     this.menuEl.style.cssText = `
       position: fixed;
       top: ${Math.max(60, coords.top - 60)}px;
@@ -237,21 +239,37 @@ export class FooMenu {
         min-width: 24px;
       `;
 
-      // Icon
-      const iconEl = document.createElement('div');
-      iconEl.textContent = item.icon;
+      // Create the proper structure for S-Checkboxes styling
+      // The CSS targets: .markdown-source-view.mod-cm6 .task-list-item-checkbox[data-task=X]::after
+      const iconEl = document.createElement('input');
+      iconEl.type = 'checkbox';
+      iconEl.className = 'task-list-item-checkbox';
+      iconEl.checked = true; // Show as checked to display the style
+      iconEl.readOnly = true; // Prevent actual checking/unchecking
+      iconEl.setAttribute('data-task', item.checkbox);
       iconEl.style.cssText = `
-        font-size: 14px;
-        font-weight: normal;
         margin-bottom: 2px;
-        font-family: var(--font-monospace);
-        background: var(--background-secondary);
-        padding: 2px 4px;
-        border-radius: 3px;
-        border: 1px solid var(--background-modifier-border);
-        min-width: 24px;
-        text-align: center;
+        cursor: pointer;
+        pointer-events: none;
       `;
+
+      // Create wrapper that matches the S-Checkboxes selector structure
+      const checkboxWrapper = document.createElement('div');
+      checkboxWrapper.className = 'HyperMD-list-line HyperMD-list-line-2 HyperMD-task-line cm-line';
+      checkboxWrapper.setAttribute('data-task', item.checkbox);
+      checkboxWrapper.style.cssText = `
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `;
+      // Wrap checkbox in label to match working DOM structure
+      const labelEl = document.createElement('label');
+      labelEl.className = 'task-list-label';
+      labelEl.appendChild(iconEl);
+      checkboxWrapper.appendChild(labelEl);
 
       // Key label
       const keyEl = document.createElement('div');
@@ -262,7 +280,7 @@ export class FooMenu {
         font-family: var(--font-monospace);
       `;
 
-      itemEl.appendChild(iconEl);
+      itemEl.appendChild(checkboxWrapper);
       itemEl.appendChild(keyEl);
 
       // Hover effects
@@ -297,20 +315,35 @@ export class FooMenu {
       margin-left: 4px;
     `;
 
-    const clearIconEl = document.createElement('div');
-    clearIconEl.textContent = '[ ]';
+    // Clear Checkbox Icon (unchecked)
+    const clearIconEl = document.createElement('input');
+    clearIconEl.type = 'checkbox';
+    clearIconEl.className = 'task-list-item-checkbox';
+    clearIconEl.checked = false; // Show as unchecked for "clear" option
+    clearIconEl.readOnly = true; // Prevent actual checking/unchecking
     clearIconEl.style.cssText = `
-      font-size: 14px;
-      font-weight: normal;
       margin-bottom: 2px;
-      font-family: var(--font-monospace);
-      background: var(--background-secondary);
-      padding: 2px 4px;
-      border-radius: 3px;
-      border: 1px solid var(--background-modifier-border);
-      min-width: 24px;
-      text-align: center;
+      cursor: pointer;
+      pointer-events: none;
     `;
+
+    // Wrap clear checkbox with proper structure for S-Checkboxes styling
+    const clearCheckboxWrapper = document.createElement('div');
+    clearCheckboxWrapper.className = 'HyperMD-list-line HyperMD-list-line-2 HyperMD-task-line cm-line';
+    clearCheckboxWrapper.setAttribute('data-task', ' ');
+    clearCheckboxWrapper.style.cssText = `
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    // Wrap clear checkbox in label to match working DOM structure
+    const clearLabelEl = document.createElement('label');
+    clearLabelEl.className = 'task-list-label';
+    clearLabelEl.appendChild(clearIconEl);
+    clearCheckboxWrapper.appendChild(clearLabelEl);
 
     const clearKeyEl = document.createElement('div');
     clearKeyEl.textContent = 'Clear';
@@ -319,7 +352,7 @@ export class FooMenu {
       color: var(--text-muted);
     `;
 
-    clearEl.appendChild(clearIconEl);
+    clearEl.appendChild(clearCheckboxWrapper);
     clearEl.appendChild(clearKeyEl);
 
     clearEl.addEventListener('mouseenter', () => {
@@ -347,10 +380,15 @@ export class FooMenu {
   private handleKeydown(event: KeyboardEvent): void {
     if (!this.isMenuOpen) return;
 
+    console.log('FooMenu: Key pressed while menu open:', event.key);
+
+    // Always prevent default and stop propagation for any key when menu is open
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
     // Handle Escape key
     if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
       this.hideMenu();
       return;
     }
@@ -358,26 +396,20 @@ export class FooMenu {
     // Handle menu item selection
     const item = FOO_MENU_ITEMS.find(item => item.key === event.key);
     if (item) {
-      event.preventDefault();
-      event.stopPropagation();
+      console.log('FooMenu: Applying checkbox:', item.checkbox);
       this.applyCheckbox(item.checkbox);
       return;
     }
 
     // Handle clear (Backspace or Delete)
     if (event.key === 'Backspace' || event.key === 'Delete') {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+      console.log('FooMenu: Clearing checkbox');
       this.clearCheckbox();
       return;
     }
 
-    // For any other key, prevent default to avoid editor interaction
-    if (this.isMenuOpen) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+    // For any other key, just consume the event (already prevented above)
+    console.log('FooMenu: Consumed key:', event.key);
   }
 
   /**
@@ -388,7 +420,7 @@ export class FooMenu {
 
     const lineText = this.currentEditor.getLine(this.currentLine);
     const newText = this.transformLine(lineText, checkbox);
-    
+
     this.currentEditor.setLine(this.currentLine, newText);
     this.hideMenu();
   }
@@ -401,7 +433,7 @@ export class FooMenu {
 
     const lineText = this.currentEditor.getLine(this.currentLine);
     const newText = this.clearCheckboxFromLine(lineText);
-    
+
     this.currentEditor.setLine(this.currentLine, newText);
     this.hideMenu();
   }
@@ -480,6 +512,6 @@ export class FooMenu {
    */
   destroy(): void {
     this.hideMenu();
-    document.removeEventListener('keydown', this.keydownHandler);
+    document.removeEventListener('keydown', this.keydownHandler, true);
   }
 }
