@@ -214,12 +214,14 @@ export class FooMenu {
       box-shadow: var(--shadow-l, 0 4px 8px rgba(0,0,0,0.2));
       z-index: 10000;
       display: flex;
+      flex-direction: row;
       gap: 12px;
       align-items: center;
       font-size: 14px;
       color: var(--text-normal, #000000);
       min-width: 200px;
       max-width: 400px;
+      max-height: 3em;
     `;
 
     console.log('FooMenu: Menu element created with styles:', this.menuEl.style.cssText);
@@ -237,6 +239,7 @@ export class FooMenu {
         border-radius: 4px;
         transition: background-color 0.2s ease;
         min-width: 24px;
+        height: auto;
       `;
 
       // Create the proper structure for S-Checkboxes styling
@@ -248,9 +251,12 @@ export class FooMenu {
       iconEl.readOnly = true; // Prevent actual checking/unchecking
       iconEl.setAttribute('data-task', item.checkbox);
       iconEl.style.cssText = `
-        margin-bottom: 2px;
+        margin: 0;
         cursor: pointer;
         pointer-events: none;
+        position: relative;
+        display: block;
+        line-height: 1;
       `;
 
       // Create wrapper that matches the S-Checkboxes selector structure
@@ -261,13 +267,29 @@ export class FooMenu {
         list-style: none;
         margin: 0;
         padding: 0;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
+        position: relative;
+        line-height: 1;
+        text-indent: 0 !important;
+        padding-inline-start: 0 !important;
+        height: 16px;
+        min-height: 16px;
+        width: 16px;
+        min-width: 16px;
       `;
       // Wrap checkbox in label to match working DOM structure
       const labelEl = document.createElement('label');
       labelEl.className = 'task-list-label';
+      labelEl.style.cssText = `
+        margin: 0;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      `;
       labelEl.appendChild(iconEl);
       checkboxWrapper.appendChild(labelEl);
 
@@ -322,9 +344,12 @@ export class FooMenu {
     clearIconEl.checked = false; // Show as unchecked for "clear" option
     clearIconEl.readOnly = true; // Prevent actual checking/unchecking
     clearIconEl.style.cssText = `
-      margin-bottom: 2px;
+      margin: 0;
       cursor: pointer;
       pointer-events: none;
+      position: relative;
+      display: block;
+      line-height: 1;
     `;
 
     // Wrap clear checkbox with proper structure for S-Checkboxes styling
@@ -335,13 +360,29 @@ export class FooMenu {
       list-style: none;
       margin: 0;
       padding: 0;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+      line-height: 1;
+      text-indent: 0 !important;
+      padding-inline-start: 0 !important;
+      height: 16px;
+      min-height: 16px;
+      width: 16px;
+      min-width: 16px;
     `;
     // Wrap clear checkbox in label to match working DOM structure
     const clearLabelEl = document.createElement('label');
     clearLabelEl.className = 'task-list-label';
+    clearLabelEl.style.cssText = `
+      margin: 0;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    `;
     clearLabelEl.appendChild(clearIconEl);
     clearCheckboxWrapper.appendChild(clearLabelEl);
 
