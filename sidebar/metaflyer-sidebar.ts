@@ -15,15 +15,20 @@ export class MetaflyerSidebar extends ItemView {
   currentFile: TFile | null = null;
   searchResults: any[] = [];
   aiSuggestions: string[] = [];
+  regexMatches: {
+    fullLine: string;
+    content: string;
+    checkboxAndContent: string;
+  }[] = [];
   isLoadingAI: boolean = false;
   currentOllamaRequest: AbortController | null = null;
   activeEditor: any = null; // Store reference to active editor
-  
+
   // Cache to prevent duplicate Ollama queries
-  lastSearchCriteria: string = '';
-  lastSearchResultsHash: string = '';
-  lastOllamaQuery: string = '';
-  lastFileHash: string = '';
+  lastSearchCriteria: string = "";
+  lastSearchResultsHash: string = "";
+  lastOllamaQuery: string = "";
+  lastFileHash: string = "";
 
   constructor(leaf: WorkspaceLeaf, plugin: MetaflyerPlugin) {
     super(leaf);
@@ -73,9 +78,11 @@ export class MetaflyerSidebar extends ItemView {
 
   private async updateForActiveFile() {
     const activeFile = this.app.workspace.getActiveFile();
-    
+
     // If the sidebar view itself becomes active, don't update
-    const activeView = this.app.workspace.getActiveViewOfType(this.constructor as any);
+    const activeView = this.app.workspace.getActiveViewOfType(
+      this.constructor as any,
+    );
     if (activeView === this) {
       return; // Don't regenerate when sidebar becomes active
     }
@@ -91,19 +98,19 @@ export class MetaflyerSidebar extends ItemView {
       if (this.currentFile?.path === activeFile.path) {
         return; // Same file, no need to regenerate
       }
-      
+
       this.currentFile = activeFile;
-      this.aiSuggestions = [];
+      this.regexMatches = [];
       this.isLoadingAI = false;
-      
+
       // Reset cache when file changes
       this.resetCache();
-      
+
       await this.performSearch();
     } else {
       this.currentFile = null;
       this.searchResults = [];
-      this.aiSuggestions = [];
+      this.regexMatches = [];
       this.isLoadingAI = false;
       this.resetCache();
       this.render();
@@ -111,10 +118,10 @@ export class MetaflyerSidebar extends ItemView {
   }
 
   private resetCache() {
-    this.lastSearchCriteria = '';
-    this.lastSearchResultsHash = '';
-    this.lastOllamaQuery = '';
-    this.lastFileHash = '';
+    this.lastSearchCriteria = "";
+    this.lastSearchResultsHash = "";
+    this.lastOllamaQuery = "";
+    this.lastFileHash = "";
   }
 
   private async performSearch() {
@@ -143,9 +150,10 @@ export class MetaflyerSidebar extends ItemView {
 
     // Check if we need to perform search
     // For backward compatibility, if search_result_count is undefined, default to showing results
-    const needsSearch = evaluation.ruleset?.search_criteria && 
-                       (evaluation.ruleset?.search_result_count === undefined || 
-                        (evaluation.ruleset?.search_result_count || 0) > 0);
+    const needsSearch =
+      evaluation.ruleset?.search_criteria &&
+      (evaluation.ruleset?.search_result_count === undefined ||
+        (evaluation.ruleset?.search_result_count || 0) > 0);
 
     if (needsSearch) {
       try {
@@ -154,7 +162,7 @@ export class MetaflyerSidebar extends ItemView {
           frontmatter,
           this.currentFile,
         );
-        
+
         // Limit results based on search_result_count
         // If undefined (backward compatibility), show all results like before
         if (evaluation.ruleset.search_result_count === undefined) {
@@ -163,11 +171,12 @@ export class MetaflyerSidebar extends ItemView {
           const maxResults = evaluation.ruleset.search_result_count || 0;
           this.searchResults = allResults.slice(0, maxResults);
         }
-        
-        this.render();
 
-        // After search completes, try AI generation if configured
-        await this.generateAISuggestions(evaluation.ruleset, frontmatter);
+        // After search completes, extract regex matches from search results
+        await this.extractRegexMatches();
+
+        // Render again after regex extraction completes
+        this.render();
       } catch (error) {
         console.error("Error performing search:", error);
         this.searchResults = [];
@@ -176,142 +185,116 @@ export class MetaflyerSidebar extends ItemView {
     } else {
       this.searchResults = [];
       this.render();
-      
-      // Still try AI generation even without search
-      await this.generateAISuggestions(evaluation.ruleset, frontmatter);
+
+      // No search results, so no regex matches to extract
+      this.regexMatches = [];
     }
   }
 
-  private async generateAISuggestions(ruleset: any, frontmatter: any) {
-    if (!ruleset?.ollama_query?.trim()) {
-      return; // No AI query configured
+  private async extractRegexMatches() {
+    this.regexMatches = [];
+
+    if (!this.searchResults || this.searchResults.length === 0) {
+      console.log("No search results to extract regex matches from");
+      return;
     }
 
-    // Don't query Ollama if there are no search results and the query uses results
-    if (this.searchResults.length === 0 && ruleset.ollama_query.includes('results')) {
-      return; // No search results to analyze
-    }
+    // Apply regex: ^\s*-\s\[\S\](.+)$ capture full line, checkbox part, and content
+    const regex = /^(\s*-\s*)(\[\S\](.+))$/gm;
 
-    // Don't query Ollama if there's no search criteria and the query uses results
-    if (!ruleset.search_criteria?.trim() && ruleset.ollama_query.includes('results')) {
-      return; // No search configured but query expects results
-    }
+    // Process each search result file
+    for (const result of this.searchResults) {
+      try {
+        let fileContent = "";
 
-    // Check if we should use cached results
-    if (await this.shouldUseCachedOllamaResults(ruleset, frontmatter)) {
-      return; // Using cached results, no need to query again
-    }
-
-    this.isLoadingAI = true;
-    this.render(); // Update UI to show loading state
-
-    try {
-      // Get current file content
-      const currentFileContent = await this.app.vault.read(this.currentFile!);
-      
-      // Prepare template context with full file content for search results
-      const resultsWithContent = await Promise.all(
-        this.searchResults.map(async (result) => {
-          let content = result.content || '';
-          
-          // If content is empty, try to read the file
-          if (!content && result.path) {
-            try {
-              const file = this.app.vault.getAbstractFileByPath(result.path);
-              if (file instanceof TFile) {
-                content = await this.app.vault.read(file);
-              }
-            } catch (error) {
-              console.warn(`Could not read content for ${result.path}:`, error);
-              // Fall back to excerpt if available
-              content = result.excerpt || '';
-            }
+        // Get file content - first try from result, then read from vault
+        if (result.content) {
+          fileContent = result.content;
+        } else if (result.path) {
+          const file = this.app.vault.getAbstractFileByPath(result.path);
+          if (file instanceof TFile) {
+            fileContent = await this.app.vault.read(file);
           }
-          
-          return {
-            title: result.basename || result.title || '',
-            path: result.path || '',
-            content: content,
-            excerpt: result.excerpt || '',
-            score: result.score || 0,
-          };
-        })
-      );
+        }
 
-      const context: TemplateContext = {
-        current_file: {
-          title: this.currentFile?.basename || '',
-          path: this.currentFile?.path || '',
-          content: currentFileContent,
-          metadata: frontmatter || {},
-        },
-        results: resultsWithContent,
-      };
+        if (!fileContent) {
+          continue;
+        }
 
-      // Process the template
-      const processedQuery = TemplateEngine.processTemplate(ruleset.ollama_query, context);
+        console.log(`Processing file for regex matches: ${result.path}`);
 
-      // Make Ollama request using the configured model
-      const response = await OllamaClient.generateSuggestions(processedQuery, this.plugin.settings.ollamaModel);
-
-      if (response.success) {
-        this.aiSuggestions = response.suggestions;
-        
-        // Cache the successful result
-        await this.cacheOllamaResults(ruleset, frontmatter, processedQuery);
-      } else {
-        console.error('Ollama error:', response.error);
-        this.aiSuggestions = [];
+        // Find all matches in this file
+        let match;
+        while ((match = regex.exec(fileContent)) !== null) {
+          const fullLine = (match[1] + match[2]).trim(); // Full line with checkbox
+          const checkboxAndContent = match[2].trim(); // Checkbox + content after list marker
+          const content = match[3].trim(); // Just the content after checkbox
+          console.log("Found regex match:", fullLine);
+          if (
+            fullLine &&
+            !this.regexMatches.some((m) => m.fullLine === fullLine)
+          ) {
+            this.regexMatches.push({ fullLine, content, checkboxAndContent });
+          }
+        }
+      } catch (error) {
+        console.warn(
+          `Error processing file ${result.path} for regex matches:`,
+          error,
+        );
       }
-    } catch (error) {
-      console.error('Error generating AI suggestions:', error);
-      this.aiSuggestions = [];
-    } finally {
-      this.isLoadingAI = false;
-      this.render();
     }
+
+    console.log("Total unique regex matches found:", this.regexMatches.length);
   }
 
-  private async shouldUseCachedOllamaResults(ruleset: any, frontmatter: any): Promise<boolean> {
+  private async shouldUseCachedOllamaResults(
+    ruleset: any,
+    frontmatter: any,
+  ): Promise<boolean> {
     if (!this.currentFile) return false;
-    
+
     try {
       const currentFileContent = await this.app.vault.read(this.currentFile);
       const currentFileHash = this.hashString(currentFileContent);
-      const currentSearchCriteria = ruleset.search_criteria || '';
+      const currentSearchCriteria = ruleset.search_criteria || "";
       const currentSearchResultsHash = this.hashSearchResults();
       const currentOllamaQuery = ruleset.ollama_query;
-      
+
       // Check if all relevant data matches the cache
-      const cacheValid = 
+      const cacheValid =
         this.lastFileHash === currentFileHash &&
         this.lastSearchCriteria === currentSearchCriteria &&
         this.lastSearchResultsHash === currentSearchResultsHash &&
         this.lastOllamaQuery === currentOllamaQuery &&
         this.aiSuggestions.length > 0; // Only use cache if we have suggestions
-      
+
       if (cacheValid) {
-        console.log('Using cached Ollama results');
+        console.log("Using cached Ollama results");
         return true;
       }
     } catch (error) {
-      console.warn('Error checking cache validity:', error);
+      console.warn("Error checking cache validity:", error);
     }
-    
+
     return false;
   }
 
-  private async cacheOllamaResults(ruleset: any, frontmatter: any, processedQuery: string) {
+  private async cacheOllamaResults(
+    ruleset: any,
+    frontmatter: any,
+    processedQuery: string,
+  ) {
     if (!this.currentFile) return;
-    
+
     try {
       const currentFileContent = await this.app.vault.read(this.currentFile);
       this.lastFileHash = this.hashString(currentFileContent);
-      this.lastSearchCriteria = ruleset.search_criteria || '';
+      this.lastSearchCriteria = ruleset.search_criteria || "";
       this.lastSearchResultsHash = this.hashSearchResults();
       this.lastOllamaQuery = ruleset.ollama_query;
     } catch (error) {
-      console.warn('Error caching Ollama results:', error);
+      console.warn("Error caching Ollama results:", error);
     }
   }
 
@@ -320,7 +303,7 @@ export class MetaflyerSidebar extends ItemView {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString();
@@ -328,9 +311,9 @@ export class MetaflyerSidebar extends ItemView {
 
   private hashSearchResults(): string {
     // Create a hash of search results content
-    const resultContent = this.searchResults.map(r => 
-      `${r.path}|${r.title}|${r.excerpt}|${r.score}`
-    ).join('||');
+    const resultContent = this.searchResults
+      .map((r) => `${r.path}|${r.title}|${r.excerpt}|${r.score}`)
+      .join("||");
     return this.hashString(resultContent);
   }
 
@@ -368,25 +351,40 @@ export class MetaflyerSidebar extends ItemView {
     }
 
     // Show current ruleset info
-    this.renderRulesetInfo(contentEl as HTMLElement, evaluation.ruleset, frontmatter);
+    this.renderRulesetInfo(
+      contentEl as HTMLElement,
+      evaluation.ruleset,
+      frontmatter,
+    );
 
     // Show search results if configured
     // For backward compatibility, if search_result_count is undefined, default to showing results (like before)
-    const shouldShowSearchResults = evaluation.ruleset?.search_criteria && 
-      (evaluation.ruleset?.search_result_count === undefined || 
-       (evaluation.ruleset?.search_result_count || 0) > 0);
-    
+    const shouldShowSearchResults =
+      evaluation.ruleset?.search_criteria &&
+      (evaluation.ruleset?.search_result_count === undefined ||
+        (evaluation.ruleset?.search_result_count || 0) > 0);
+
     if (shouldShowSearchResults) {
       this.renderSearchResults(contentEl as HTMLElement);
     }
 
-    // Show AI suggestions if configured
-    if (evaluation.ruleset?.ollama_query?.trim()) {
-      this.renderAISuggestions(contentEl as HTMLElement);
+    // Note: regex extraction happens after search completes, not here
+    console.log("Regex matches available:", this.regexMatches);
+
+    // Show regex matches if any found
+    if (this.regexMatches.length > 0) {
+      console.log("Rendering regex matches");
+      this.renderRegexMatches(contentEl as HTMLElement);
+    } else {
+      console.log("No regex matches to render");
     }
   }
 
-  private renderRulesetInfo(contentEl: HTMLElement, ruleset: any, frontmatter: any) {
+  private renderRulesetInfo(
+    contentEl: HTMLElement,
+    ruleset: any,
+    frontmatter: any,
+  ) {
     const rulesetInfo = contentEl.createDiv("ruleset-info");
     rulesetInfo.style.marginBottom = "15px";
     rulesetInfo.style.padding = "10px";
@@ -400,16 +398,18 @@ export class MetaflyerSidebar extends ItemView {
     });
 
     if (ruleset.search_criteria) {
-      const processedCriteria = this.searchProcessor.processCriteriaPlaceholders(
-        ruleset.search_criteria,
-        frontmatter || {},
-        this.currentFile,
-      );
+      const processedCriteria =
+        this.searchProcessor.processCriteriaPlaceholders(
+          ruleset.search_criteria,
+          frontmatter || {},
+          this.currentFile,
+        );
 
       rulesetInfo.createEl("p", {
         text: `Search: ${processedCriteria}`,
         attr: {
-          style: "margin: 0; font-family: var(--font-monospace); font-size: 0.9em;",
+          style:
+            "margin: 0; font-family: var(--font-monospace); font-size: 0.9em;",
         },
       });
     }
@@ -433,7 +433,7 @@ export class MetaflyerSidebar extends ItemView {
 
     for (const result of this.searchResults) {
       const listItem = resultsList.createEl("li");
-      
+
       listItem.addEventListener("click", () => {
         // Open in new tab as specified in requirements
         this.app.workspace.openLinkText(result.path, "", true);
@@ -452,52 +452,85 @@ export class MetaflyerSidebar extends ItemView {
     }
   }
 
-  private renderAISuggestions(contentEl: HTMLElement) {
-    const aiHeader = contentEl.createEl("h4", {
-      text: "AI Suggestions",
+  private renderRegexMatches(contentEl: HTMLElement) {
+    console.log(
+      "renderRegexMatches called with",
+      this.regexMatches.length,
+      "matches",
+    );
+    console.log("Matches array:", this.regexMatches);
+
+    const matchesHeader = contentEl.createEl("h4", {
+      text: "Available Items",
       attr: { style: "margin: 15px 0 10px 0;" },
     });
 
-    if (this.isLoadingAI) {
+    if (this.regexMatches.length === 0) {
+      console.log("No regex matches to render");
       contentEl.createEl("p", {
-        text: "Generating suggestions...",
+        text: "No items found",
         attr: { style: "color: var(--text-muted); font-style: italic;" },
       });
       return;
     }
 
-    if (this.aiSuggestions.length === 0) {
-      contentEl.createEl("p", {
-        text: "No suggestions available",
-        attr: { style: "color: var(--text-muted); font-style: italic;" },
-      });
-      return;
-    }
+    console.log("Creating container for", this.regexMatches.length, "matches");
 
-    // Create a div container for the suggestions content
-    const suggestionsContainer = contentEl.createEl("div");
-    suggestionsContainer.style.padding = "10px";
-    suggestionsContainer.style.border = "1px solid var(--background-modifier-border)";
-    suggestionsContainer.style.borderRadius = "5px";
-    suggestionsContainer.style.backgroundColor = "var(--background-secondary)";
-    suggestionsContainer.style.lineHeight = "1.5";
+    // Create a div container for the matches content
+    const matchesContainer = contentEl.createEl("div");
+    matchesContainer.style.padding = "10px";
+    matchesContainer.style.border =
+      "1px solid var(--background-modifier-border)";
+    matchesContainer.style.borderRadius = "5px";
+    matchesContainer.style.backgroundColor = "var(--background-secondary)";
+    matchesContainer.style.lineHeight = "1.5";
 
-    // Render each suggestion as a separate clickable line
-    for (const suggestion of this.aiSuggestions) {
-      if (suggestion.trim()) {
-        this.createClickableLine(suggestionsContainer, suggestion.trim());
+    // Render each match as a separate clickable line
+    for (const match of this.regexMatches) {
+      console.log("Processing match for rendering:", match);
+      if (match.fullLine.trim()) {
+        this.createClickableLine(matchesContainer, match);
+        console.log("Created clickable line for:", match.fullLine.trim());
       }
     }
+
+    console.log("Finished rendering regex matches");
   }
 
-  private createClickableLine(container: HTMLElement, text: string) {
+  private createClickableLine(
+    container: HTMLElement,
+    match: { fullLine: string; content: string; checkboxAndContent: string },
+  ) {
     const lineElement = container.createEl("div");
     lineElement.style.margin = "0 0 8px 0";
     lineElement.style.cursor = "pointer";
     lineElement.style.padding = "4px";
     lineElement.style.borderRadius = "3px";
     lineElement.style.transition = "background-color 0.2s";
-    lineElement.textContent = text;
+
+    // Check if this is a checkbox line and render with proper classes
+    const checkboxMatch = match.fullLine.match(/^(\s*-\s*)\[(\S)\](.+)$/);
+    if (checkboxMatch) {
+      const [, prefix, checkboxChar, content] = checkboxMatch;
+
+      // Create the structure for proper checkbox rendering
+      const prefixSpan = lineElement.createEl("span");
+      prefixSpan.textContent = prefix;
+
+      const checkboxSpan = lineElement.createEl("span");
+      checkboxSpan.className = "task-list-item-checkbox";
+      checkboxSpan.setAttribute("data-task", checkboxChar);
+      checkboxSpan.textContent = `[${checkboxChar}]`;
+
+      const contentSpan = lineElement.createEl("span");
+      contentSpan.textContent = content;
+
+      // Add classes to the line element for proper styling
+      lineElement.className = "HyperMD-task-line";
+    } else {
+      // Regular text line
+      lineElement.textContent = match.fullLine;
+    }
 
     // Add hover effect for individual lines
     lineElement.addEventListener("mouseenter", () => {
@@ -512,32 +545,53 @@ export class MetaflyerSidebar extends ItemView {
     lineElement.addEventListener("click", (event) => {
       event.stopPropagation();
       event.preventDefault();
-      
+
       // Insert this specific line at cursor position using stored editor
-      this.insertTextInActiveEditor(text);
+      this.insertTextInActiveEditor(match);
     });
   }
 
-  private insertTextInActiveEditor(text: string) {
-    // Add carriage return to prevent insertions running together
-    const textWithNewline = text + '\n';
-    
+  private insertTextInActiveEditor(match: {
+    fullLine: string;
+    content: string;
+    checkboxAndContent: string;
+  }) {
     if (this.activeEditor) {
-      // Use the stored active editor directly
       const cursor = this.activeEditor.getCursor();
+      const currentLine = this.activeEditor.getLine(cursor.line);
+      const beforeCursor = currentLine.substring(0, cursor.ch);
+
+      let textToInsert = "";
+
+      // Check what's before the cursor
+      if (cursor.ch === 0 || beforeCursor.match(/^\s*$/)) {
+        // At beginning of line or only whitespace - insert full line
+        textToInsert = match.fullLine;
+      } else if (beforeCursor.match(/^\s*-\s*/)) {
+        // Already on a list line - insert checkbox and content
+        textToInsert = match.checkboxAndContent;
+      } else {
+        // Other text on line - insert only content
+        textToInsert = match.content;
+      }
+
+      const textWithNewline = textToInsert + "\n";
       this.activeEditor.replaceRange(textWithNewline, cursor);
-      
+
       // Move cursor to end of inserted text
       const newPos = {
         line: cursor.line,
-        ch: cursor.ch + textWithNewline.length
+        ch: cursor.ch + textWithNewline.length,
       };
       this.activeEditor.setCursor(newPos);
     } else {
-      // Fallback to ClipboardUtils method
-      const success = ClipboardUtils.insertTextAtCursor(this.app, textWithNewline);
+      // Fallback to ClipboardUtils method - use full line
+      const success = ClipboardUtils.insertTextAtCursor(
+        this.app,
+        match.fullLine + "\n",
+      );
       if (!success) {
-        console.warn('Could not insert AI suggestion - no active editor found');
+        console.warn("Could not insert task item - no active editor found");
       }
     }
   }
