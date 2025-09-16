@@ -14,6 +14,8 @@ export class MetaflyerSidebar extends ItemView {
   searchProcessor: SearchCriteriaProcessor;
   currentFile: TFile | null = null;
   searchResults: any[] = [];
+  allSearchResults: any[] = [];
+  displayedResultCount: number = 0;
   aiSuggestions: string[] = [];
   regexMatches: {
     fullLine: string;
@@ -52,8 +54,6 @@ export class MetaflyerSidebar extends ItemView {
   async onOpen() {
     const container = this.containerEl.children[1];
     container.empty();
-
-    container.createEl("h3", { text: "Metaflyer Search" });
 
     this.render();
 
@@ -122,6 +122,8 @@ export class MetaflyerSidebar extends ItemView {
     this.lastSearchResultsHash = "";
     this.lastOllamaQuery = "";
     this.lastFileHash = "";
+    this.allSearchResults = [];
+    this.displayedResultCount = 0;
   }
 
   private async performSearch() {
@@ -163,13 +165,18 @@ export class MetaflyerSidebar extends ItemView {
           this.currentFile,
         );
 
+        // Store all results
+        this.allSearchResults = allResults;
+
         // Limit results based on search_result_count
         // If undefined (backward compatibility), show all results like before
         if (evaluation.ruleset.search_result_count === undefined) {
           this.searchResults = allResults;
+          this.displayedResultCount = allResults.length;
         } else {
           const maxResults = evaluation.ruleset.search_result_count || 0;
           this.searchResults = allResults.slice(0, maxResults);
+          this.displayedResultCount = maxResults;
         }
 
         // After search completes, extract regex matches from search results
@@ -180,10 +187,14 @@ export class MetaflyerSidebar extends ItemView {
       } catch (error) {
         console.error("Error performing search:", error);
         this.searchResults = [];
+        this.allSearchResults = [];
+        this.displayedResultCount = 0;
         this.render();
       }
     } else {
       this.searchResults = [];
+      this.allSearchResults = [];
+      this.displayedResultCount = 0;
       this.render();
 
       // No search results, so no regex matches to extract
@@ -416,9 +427,31 @@ export class MetaflyerSidebar extends ItemView {
   }
 
   private renderSearchResults(contentEl: HTMLElement) {
-    const resultsHeader = contentEl.createEl("h4", {
+    const headerContainer = contentEl.createDiv({
+      attr: {
+        style:
+          "display: flex; align-items: center; justify-content: space-between; margin: 15px 0 10px 0;",
+      },
+    });
+
+    const resultsHeader = headerContainer.createEl("h4", {
       text: "Related Notes",
-      attr: { style: "margin: 15px 0 10px 0;" },
+      attr: { style: "margin: 0;" },
+    });
+
+    const refreshButton = headerContainer.createEl("button", {
+      text: "↻",
+      attr: {
+        style:
+          "background: none; border: 1px solid var(--background-modifier-border); border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 14px;",
+        title: "Refresh related notes",
+      },
+    });
+
+    refreshButton.addEventListener("click", async () => {
+      // Reset cache and perform fresh search
+      this.resetCache();
+      await this.performSearch();
     });
 
     if (this.searchResults.length === 0) {
@@ -429,7 +462,8 @@ export class MetaflyerSidebar extends ItemView {
       return;
     }
 
-    const resultsList = contentEl.createEl("ul", "metaflyer-search-results");
+    const resultsContainer = contentEl.createDiv("metaflyer-search-results");
+    const resultsList = resultsContainer.createEl("ul");
 
     for (const result of this.searchResults) {
       const listItem = resultsList.createEl("li");
@@ -449,6 +483,34 @@ export class MetaflyerSidebar extends ItemView {
         const metadata = listItem.createEl("div", "file-metadata");
         metadata.textContent = result.excerpt.substring(0, 100) + "...";
       }
+    }
+
+    // Add "show more" button if there are more results to show
+    if (this.allSearchResults.length > this.searchResults.length) {
+      const showMoreButton = contentEl.createEl("button", {
+        text: "show more",
+        attr: {
+          style:
+            "background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; margin-top: 5px; text-decoration: underline;",
+        },
+      });
+
+      showMoreButton.addEventListener("click", () => {
+        const cache = this.app.metadataCache.getFileCache(this.currentFile!);
+        const frontmatter = cache?.frontmatter;
+        const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+        const searchResultCount = evaluation.ruleset?.search_result_count || 5;
+
+        // Increase displayed count by the search result count value
+        const newDisplayCount = this.displayedResultCount + searchResultCount;
+        this.searchResults = this.allSearchResults.slice(0, newDisplayCount);
+        this.displayedResultCount = Math.min(
+          newDisplayCount,
+          this.allSearchResults.length,
+        );
+
+        this.render();
+      });
     }
   }
 
