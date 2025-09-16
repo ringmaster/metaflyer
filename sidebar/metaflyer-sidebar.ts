@@ -629,7 +629,10 @@ export class MetaflyerSidebar extends ItemView {
       if (cursor.ch === 0 || beforeCursor.match(/^\s*$/)) {
         // At beginning of line or only whitespace - insert full line
         textToInsert = match.fullLine;
-      } else if (beforeCursor.match(/^\s*-\s*/)) {
+      } else if (beforeCursor.match(/^\s*-$/)) {
+        // Already on a list line - insert checkbox and content with missing space
+        textToInsert = " " + match.checkboxAndContent;
+      } else if (beforeCursor.match(/^\s*-\s*$/)) {
         // Already on a list line - insert checkbox and content
         textToInsert = match.checkboxAndContent;
       } else {
@@ -646,6 +649,12 @@ export class MetaflyerSidebar extends ItemView {
         ch: cursor.ch + textWithNewline.length,
       };
       this.activeEditor.setCursor(newPos);
+
+      // Focus the editor after inserting text
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView) {
+        activeView.editor.focus();
+      }
     } else {
       // Fallback to ClipboardUtils method - use full line
       const success = ClipboardUtils.insertTextAtCursor(
@@ -654,6 +663,12 @@ export class MetaflyerSidebar extends ItemView {
       );
       if (!success) {
         console.warn("Could not insert task item - no active editor found");
+      }
+
+      // Focus the editor even in fallback case
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView) {
+        activeView.editor.focus();
       }
     }
   }
