@@ -79,7 +79,8 @@ export class MetadataEnforcer extends Component {
 
     const populatedMetadata = this.rulesetManager.autoPopulateMetadata(
       currentFrontmatter,
-      evaluation.ruleset
+      evaluation.ruleset,
+      file
     );
 
     await this.updateFileFrontmatter(file, populatedMetadata);

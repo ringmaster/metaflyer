@@ -94,6 +94,13 @@ export class FooMenu {
       this.menuEl = null;
     }
 
+    // Return focus to the editor
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (view?.editor) {
+      // @ts-ignore - focus the editor
+      view.editor.focus();
+    }
+
     this.isMenuOpen = false;
     this.currentEditor = null;
     this.currentLine = -1;
@@ -454,13 +461,27 @@ export class FooMenu {
   }
 
   /**
-   * Apply a checkbox to the current line
+   * Apply a checkbox to the current line (or toggle it off if same type)
    */
   private applyCheckbox(checkbox: string): void {
     if (!this.currentEditor) return;
 
     const lineText = this.currentEditor.getLine(this.currentLine);
-    const newText = this.transformLine(lineText, checkbox);
+    
+    // Check if the line already has this checkbox type
+    const existingCheckboxMatch = lineText.match(/\[([^\]]*)\]/);
+    const currentCheckbox = existingCheckboxMatch ? existingCheckboxMatch[1] : null;
+    
+    let newText: string;
+    if (currentCheckbox === checkbox) {
+      // Same checkbox type - remove it (toggle off)
+      console.log('FooMenu: Toggling off existing checkbox:', checkbox);
+      newText = this.clearCheckboxFromLine(lineText);
+    } else {
+      // Different or no checkbox - apply the new one
+      console.log('FooMenu: Applying new checkbox:', checkbox);
+      newText = this.transformLine(lineText, checkbox);
+    }
 
     this.currentEditor.setLine(this.currentLine, newText);
     this.hideMenu();

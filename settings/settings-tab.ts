@@ -545,26 +545,26 @@ export class MetaflyerSettingsTab extends PluginSettingTab {
         }
 
         if (evaluation.ruleset.title) {
-          const generatedTitle = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset);
           // Create a mock file object for testing
           const mockFile = {
             stat: {
               ctime: Date.now() // Use current time as creation time for testing
             }
-          };
+          } as any;
+          const generatedTitle = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset, mockFile);
           // Process title with populated metadata using PlaceholderProcessor
           const titleResult = this.processPlaceholdersForTesting(evaluation.ruleset.title, generatedTitle, mockFile);
           resultsList.createEl('li', { text: `📝 Generated title: "${titleResult}"` });
         }
 
         if (evaluation.ruleset.path) {
-          const generatedMeta = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset);
           // Create a mock file object for testing
           const mockFile = {
             stat: {
               ctime: Date.now() // Use current time as creation time for testing
             }
-          };
+          } as any;
+          const generatedMeta = this.plugin.rulesetManager.autoPopulateMetadata(frontmatter, evaluation.ruleset, mockFile);
           const pathResult = this.processPlaceholdersForTesting(evaluation.ruleset.path, generatedMeta, mockFile);
           resultsList.createEl('li', { text: `📁 Generated path: "${pathResult}"` });
         }

@@ -1,5 +1,5 @@
 import { MetaflyerSettings, Ruleset } from './settings';
-import { parseYaml } from 'obsidian';
+import { parseYaml, TFile } from 'obsidian';
 
 export interface RuleEvaluation {
 	ruleset: Ruleset | null;
@@ -129,29 +129,31 @@ export class RulesetManager {
 		}
 	}
 
-	autoPopulateMetadata(frontmatter: any, ruleset: Ruleset): Record<string, any> {
+	autoPopulateMetadata(frontmatter: any, ruleset: Ruleset, file?: TFile): Record<string, any> {
 		const populated = { ...frontmatter };
 
 		for (const field of ruleset.metadata) {
 			if (!populated.hasOwnProperty(field.name) || this.isFieldEmpty(populated[field.name], field.type)) {
-				populated[field.name] = this.getDefaultValue(field);
+				populated[field.name] = this.getDefaultValue(field, file);
 			}
 		}
 
 		return populated;
 	}
 
-	private getDefaultValue(field: any): any {
+	private getDefaultValue(field: any, file?: TFile): any {
 		switch (field.type) {
 			case 'string':
 				return '';
 			case 'array':
 				return [];
 			case 'date':
+				// Use file creation date if available, otherwise fallback to current date
+				const date = file ? new Date(file.stat.ctime) : new Date();
 				if (field.format) {
-					return this.formatDate(new Date(), field.format);
+					return this.formatDate(date, field.format);
 				}
-				return new Date().toISOString().split('T')[0];
+				return date.toISOString().split('T')[0];
 			case 'number':
 				return 0;
 			case 'boolean':

@@ -27,194 +27,202 @@ export default class MetaflyerPlugin extends Plugin {
   fooMenu: FooMenu;
 
   async onload() {
-    await this.loadSettings();
+    console.time('Metaflyer onload');
+    try {
+      await this.loadSettings();
 
-    this.rulesetManager = new RulesetManager(this.settings);
-    this.metadataEnforcer = new MetadataEnforcer(
-      this.app,
-      this.rulesetManager,
-      this.settings.enableWarnings,
-    );
-    this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
-    this.fooMenu = new FooMenu(this.app, this, this.rulesetManager);
+      this.rulesetManager = new RulesetManager(this.settings);
+      this.metadataEnforcer = new MetadataEnforcer(
+        this.app,
+        this.rulesetManager,
+        this.settings.enableWarnings,
+      );
+      this.autoOrganizer = new AutoOrganizer(this.app, this.rulesetManager);
+      this.fooMenu = new FooMenu(this.app, this, this.rulesetManager);
 
-    this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
+      this.addSettingTab(new MetaflyerSettingsTab(this.app, this));
 
-    // Register placeholder marker extension
-    this.registerEditorExtension(placeholderMarkerExtension);
+      // Register placeholder marker extension
+      this.registerEditorExtension(placeholderMarkerExtension);
 
-    // Register the sidebar view
-    this.registerView(
-      METAFLYER_SIDEBAR_TYPE,
-      (leaf) => new MetaflyerSidebar(leaf, this),
-    );
+      // Register the sidebar view
+      this.registerView(
+        METAFLYER_SIDEBAR_TYPE,
+        (leaf) => new MetaflyerSidebar(leaf, this),
+      );
 
-    // Add command to open sidebar
-    this.addCommand({
-      id: "open-metaflyer-sidebar",
-      name: "Open Metaflyer Sidebar",
-      callback: () => {
-        this.activateSidebar();
-      },
-    });
+      // Add command to open sidebar
+      this.addCommand({
+        id: "open-metaflyer-sidebar",
+        name: "Open Metaflyer Sidebar",
+        callback: () => {
+          this.activateSidebar();
+        },
+      });
 
-    this.addCommand({
-      id: "organize-note",
-      name: "Organize Note (Rename & Move)",
-      checkCallback: (checking: boolean) => {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile) {
-          const cache = this.app.metadataCache.getFileCache(activeFile);
-          const frontmatter = cache?.frontmatter;
-          const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+      this.addCommand({
+        id: "organize-note",
+        name: "Organize Note (Rename & Move)",
+        checkCallback: (checking: boolean) => {
+          const activeFile = this.app.workspace.getActiveFile();
+          if (activeFile) {
+            const cache = this.app.metadataCache.getFileCache(activeFile);
+            const frontmatter = cache?.frontmatter;
+            const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
 
-          // Only show command if note is complete and matches a ruleset
-          if (evaluation.matches && evaluation.isComplete) {
+            // Only show command if note is complete and matches a ruleset
+            if (evaluation.matches && evaluation.isComplete) {
+              if (!checking) {
+                this.autoOrganizer.organizeNote(activeFile);
+              }
+              return true;
+            }
+          }
+          return false;
+        },
+      });
+
+      this.addCommand({
+        id: "toggle-warnings",
+        name: "Toggle Warning Visibility",
+        callback: async () => {
+          this.settings.enableWarnings = !this.settings.enableWarnings;
+          await this.saveSettings();
+
+          // Re-evaluate all files to apply/remove warnings
+          this.metadataEnforcer.evaluateAllFiles();
+        },
+      });
+
+      this.addCommand({
+        id: "apply-ruleset",
+        name: "Apply Ruleset to Current Note",
+        checkCallback: (checking: boolean) => {
+          const activeFile = this.app.workspace.getActiveFile();
+          if (activeFile && activeFile.extension === "md") {
             if (!checking) {
-              this.autoOrganizer.organizeNote(activeFile);
+              this.showRulesetSelector();
             }
             return true;
           }
-        }
-        return false;
-      },
-    });
-
-    this.addCommand({
-      id: "toggle-warnings",
-      name: "Toggle Warning Visibility",
-      callback: async () => {
-        this.settings.enableWarnings = !this.settings.enableWarnings;
-        await this.saveSettings();
-
-        // Re-evaluate all files to apply/remove warnings
-        this.metadataEnforcer.evaluateAllFiles();
-      },
-    });
-
-    this.addCommand({
-      id: "apply-ruleset",
-      name: "Apply Ruleset to Current Note",
-      checkCallback: (checking: boolean) => {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile && activeFile.extension === "md") {
-          if (!checking) {
-            this.showRulesetSelector();
-          }
-          return true;
-        }
-        return false;
-      },
-    });
-
-    this.addCommand({
-      id: "paste-rich-text-as-markdown",
-      name: "Paste Rich Text as Markdown",
-      checkCallback: (checking: boolean) => {
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView && activeView.editor) {
-          if (!checking) {
-            this.pasteRichTextAsMarkdown();
-          }
-          return true;
-        }
-        return false;
-      },
-      hotkeys: [
-        {
-          modifiers: ["Mod", "Shift"],
-          key: "v",
+          return false;
         },
-      ],
-    });
+      });
 
-    this.addCommand({
-      id: "test-html-to-markdown",
-      name: "Test HTML to Markdown Conversion",
-      callback: () => {
-        ClipboardUtils.testHtmlToMarkdown();
-      },
-    });
-
-    this.addCommand({
-      id: "go-to-next-placeholder-marker",
-      name: "Go to next placeholder marker",
-      editorCallback: (editor, view) => {
-        if (view instanceof MarkdownView) {
-          // @ts-ignore - access CodeMirror instance
-          const editorView = editor.cm;
-          const success = navigateToMarker(editorView, 'next');
-          if (!success) {
-            new Notice("No placeholder markers found");
+      this.addCommand({
+        id: "paste-rich-text-as-markdown",
+        name: "Paste Rich Text as Markdown",
+        checkCallback: (checking: boolean) => {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView && activeView.editor) {
+            if (!checking) {
+              this.pasteRichTextAsMarkdown();
+            }
+            return true;
           }
-        }
-      },
-    });
+          return false;
+        },
+        hotkeys: [
+          {
+            modifiers: ["Mod", "Shift"],
+            key: "v",
+          },
+        ],
+      });
 
-    this.addCommand({
-      id: "go-to-previous-placeholder-marker", 
-      name: "Go to previous placeholder marker",
-      editorCallback: (editor, view) => {
-        if (view instanceof MarkdownView) {
-          // @ts-ignore - access CodeMirror instance
-          const editorView = editor.cm;
-          const success = navigateToMarker(editorView, 'prev');
-          if (!success) {
-            new Notice("No placeholder markers found");
+      this.addCommand({
+        id: "test-html-to-markdown",
+        name: "Test HTML to Markdown Conversion",
+        callback: () => {
+          ClipboardUtils.testHtmlToMarkdown();
+        },
+      });
+
+      this.addCommand({
+        id: "go-to-next-placeholder-marker",
+        name: "Go to next placeholder marker",
+        editorCallback: (editor, view) => {
+          if (view instanceof MarkdownView) {
+            // @ts-ignore - access CodeMirror instance
+            const editorView = editor.cm;
+            const success = navigateToMarker(editorView, 'next');
+            if (!success) {
+              new Notice("No placeholder markers found");
+            }
           }
-        }
-      },
-    });
+        },
+      });
 
-    this.addCommand({
-      id: "show-foo-menu",
-      name: "Show Foo Menu",
-      callback: () => {
-        this.fooMenu.showMenu();
-      },
-    });
+      this.addCommand({
+        id: "go-to-previous-placeholder-marker",
+        name: "Go to previous placeholder marker",
+        editorCallback: (editor, view) => {
+          if (view instanceof MarkdownView) {
+            // @ts-ignore - access CodeMirror instance
+            const editorView = editor.cm;
+            const success = navigateToMarker(editorView, 'prev');
+            if (!success) {
+              new Notice("No placeholder markers found");
+            }
+          }
+        },
+      });
 
-    this.registerEvent(
-      this.app.metadataCache.on("changed", (file: TFile) => {
-        this.metadataEnforcer.evaluateFile(file);
-      }),
-    );
+      this.addCommand({
+        id: "show-foo-menu",
+        name: "Show Foo Menu",
+        callback: () => {
+          this.fooMenu.showMenu();
+        },
+      });
 
-    this.registerEvent(
-      this.app.vault.on("create", (file: TFile) => {
-        if (file.extension === "md") {
-          setTimeout(() => {
-            this.metadataEnforcer.evaluateFile(file);
-          }, 100);
-        }
-      }),
-    );
-
-    this.registerEvent(
-      this.app.vault.on("rename", (file: TFile, oldPath: string) => {
-        if (file.extension === "md") {
+      this.registerEvent(
+        this.app.metadataCache.on("changed", (file: TFile) => {
           this.metadataEnforcer.evaluateFile(file);
-        }
-      }),
-    );
+        }),
+      );
 
-    this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile && activeFile.extension === "md") {
-          setTimeout(() => {
-            this.metadataEnforcer.evaluateFile(activeFile);
-          }, 50);
-        }
-      }),
-    );
+      this.registerEvent(
+        this.app.vault.on("create", (file: TFile) => {
+          if (file.extension === "md") {
+            setTimeout(() => {
+              this.metadataEnforcer.evaluateFile(file);
+            }, 100);
+          }
+        }),
+      );
+
+      this.registerEvent(
+        this.app.vault.on("rename", (file: TFile, oldPath: string) => {
+          if (file.extension === "md") {
+            this.metadataEnforcer.evaluateFile(file);
+          }
+        }),
+      );
+
+      this.registerEvent(
+        this.app.workspace.on("active-leaf-change", () => {
+          const activeFile = this.app.workspace.getActiveFile();
+          if (activeFile && activeFile.extension === "md") {
+            setTimeout(() => {
+              this.metadataEnforcer.evaluateFile(activeFile);
+            }, 50);
+          }
+        }),
+      );
 
 
-    this.app.workspace.onLayoutReady(() => {
-      this.metadataEnforcer.evaluateAllFiles();
-      // Auto-open the sidebar on first load
-      this.activateSidebar();
-    });
+      this.app.workspace.onLayoutReady(() => {
+        this.metadataEnforcer.evaluateAllFiles();
+        // Auto-open the sidebar on first load
+        this.activateSidebar();
+      });
+
+      console.timeEnd('Metaflyer onload');
+    } catch (error) {
+      console.error('Metaflyer: Error during onload():', error);
+      throw error;
+    }
   }
 
   onunload() {
