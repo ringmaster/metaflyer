@@ -1,6 +1,8 @@
 import {
   Plugin,
   TFile,
+  TFolder,
+  TAbstractFile,
   Notice,
   MarkdownView,
   FuzzySuggestModal,
@@ -15,7 +17,10 @@ import {
   METAFLYER_SIDEBAR_TYPE,
 } from "./sidebar/metaflyer-sidebar";
 import { ClipboardUtils } from "./core/clipboard-utils";
-import { placeholderMarkerExtension, navigateToMarker } from "./core/placeholder-markers";
+import {
+  placeholderMarkerExtension,
+  navigateToMarker,
+} from "./core/placeholder-markers";
 import { TemplateEngine } from "./core/template-engine";
 import { FooMenu } from "./foo-menu/foo-menu";
 
@@ -27,7 +32,7 @@ export default class MetaflyerPlugin extends Plugin {
   fooMenu: FooMenu;
 
   async onload() {
-    console.time('Metaflyer onload');
+    console.time("Metaflyer onload");
     try {
       await this.loadSettings();
 
@@ -68,7 +73,8 @@ export default class MetaflyerPlugin extends Plugin {
           if (activeFile) {
             const cache = this.app.metadataCache.getFileCache(activeFile);
             const frontmatter = cache?.frontmatter;
-            const evaluation = this.rulesetManager.evaluateMetadata(frontmatter);
+            const evaluation =
+              this.rulesetManager.evaluateMetadata(frontmatter);
 
             // Only show command if note is complete and matches a ruleset
             if (evaluation.matches && evaluation.isComplete) {
@@ -113,7 +119,8 @@ export default class MetaflyerPlugin extends Plugin {
         id: "paste-rich-text-as-markdown",
         name: "Paste Rich Text as Markdown",
         checkCallback: (checking: boolean) => {
-          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          const activeView =
+            this.app.workspace.getActiveViewOfType(MarkdownView);
           if (activeView && activeView.editor) {
             if (!checking) {
               this.pasteRichTextAsMarkdown();
@@ -145,7 +152,7 @@ export default class MetaflyerPlugin extends Plugin {
           if (view instanceof MarkdownView) {
             // @ts-ignore - access CodeMirror instance
             const editorView = editor.cm;
-            const success = navigateToMarker(editorView, 'next');
+            const success = navigateToMarker(editorView, "next");
             if (!success) {
               new Notice("No placeholder markers found");
             }
@@ -160,7 +167,7 @@ export default class MetaflyerPlugin extends Plugin {
           if (view instanceof MarkdownView) {
             // @ts-ignore - access CodeMirror instance
             const editorView = editor.cm;
-            const success = navigateToMarker(editorView, 'prev');
+            const success = navigateToMarker(editorView, "prev");
             if (!success) {
               new Notice("No placeholder markers found");
             }
@@ -211,6 +218,12 @@ export default class MetaflyerPlugin extends Plugin {
         }),
       );
 
+      // Register file menu context menu handler
+      this.registerEvent(
+        this.app.workspace.on("file-menu", (menu, file, source) => {
+          this.handleFileMenu(menu, file, source);
+        }),
+      );
 
       this.app.workspace.onLayoutReady(() => {
         this.metadataEnforcer.evaluateAllFiles();
@@ -218,9 +231,9 @@ export default class MetaflyerPlugin extends Plugin {
         this.activateSidebar();
       });
 
-      console.timeEnd('Metaflyer onload');
+      console.timeEnd("Metaflyer onload");
     } catch (error) {
-      console.error('Metaflyer: Error during onload():', error);
+      console.error("Metaflyer: Error during onload():", error);
       throw error;
     }
   }
@@ -371,6 +384,98 @@ export default class MetaflyerPlugin extends Plugin {
       }
     }
     return String(value);
+  }
+
+  private handleFileMenu(menu: any, targetFile: TAbstractFile, source: string) {
+    const activeFile = this.app.workspace.getActiveFile();
+
+    if (targetFile instanceof TFolder) {
+      // Right-clicking on a folder - offer to move active file here
+      if (!activeFile) {
+        return; // No active file to move
+      }
+
+      // Don't show option if the file is already in the target folder
+      if (activeFile.parent?.path === targetFile.path) {
+        return;
+      }
+
+      const fileName = activeFile.basename;
+      menu.addItem((item: any) => {
+        item
+          .setTitle(`Move '${fileName}' Here`)
+          .setIcon("file-text")
+          .onClick(async () => {
+            await this.moveFileToFolder(activeFile, targetFile);
+          });
+      });
+    } else if (targetFile instanceof TFile) {
+      // Right-clicking on a file - offer to move active file to this file's folder
+      if (!activeFile || !targetFile.parent) {
+        return; // No active file or target file has no parent folder
+      }
+
+      // Don't show option if files are already in the same folder
+      if (activeFile.parent?.path === targetFile.parent.path) {
+        return;
+      }
+
+      // Don't show option if trying to move the active file to itself
+      if (targetFile.path === activeFile.path) {
+        return;
+      }
+
+      const activeFileName = activeFile.basename;
+
+      menu.addItem((item: any) => {
+        item
+          .setTitle(`Move '${activeFileName}' Here`)
+          .setIcon("file-text")
+          .onClick(async () => {
+            await this.moveFileToFolder(activeFile, targetFile.parent!);
+          });
+      });
+    }
+  }
+
+  private async moveFileToFolder(file: TFile, targetFolder: TFolder) {
+    try {
+      const targetPath =
+        targetFolder.path === "/"
+          ? file.name
+          : `${targetFolder.path}/${file.name}`;
+
+      // Check if file already exists at target location
+      if (await this.app.vault.adapter.exists(targetPath)) {
+        new Notice(
+          `❌ File '${file.name}' already exists in ${targetFolder.path || "root"}`,
+        );
+        return;
+      }
+
+      // Show loading notice
+      const loadingNotice = new Notice(`Moving '${file.name}'...`, 0);
+
+      // Move the file
+      await this.app.fileManager.renameFile(file, targetPath);
+
+      // Hide loading notice and show success
+      loadingNotice.hide();
+      const targetDisplay =
+        targetFolder.path === "/" ? "root" : targetFolder.name;
+      new Notice(`✅ Moved '${file.name}' to ${targetDisplay}`);
+
+      // Reveal the moved file in the file explorer
+      const movedFile = this.app.vault.getAbstractFileByPath(targetPath);
+      if (movedFile && movedFile instanceof TFile) {
+        this.app.workspace.getLeaf().openFile(movedFile);
+      }
+    } catch (error) {
+      console.error("Error moving file:", error);
+      new Notice(
+        `❌ Failed to move '${file.name}': ${error.message || "Unknown error"}`,
+      );
+    }
   }
 
   private async pasteRichTextAsMarkdown() {
